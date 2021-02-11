@@ -135,6 +135,10 @@ namespace DSP_Mods.CopyInserters
                 cachedInserters.Clear(); // Remove previous copy info
 
                 var sourceEntity = objectId;
+                if (objectId >= __factory.entityPool.Length) 
+                {
+                    return;
+                }
                 var sourcePos = ___factory.entityPool[objectId].pos;
                 // Find connected inserters                
                 int matches = 0;
