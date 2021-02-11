@@ -240,43 +240,46 @@ namespace DSP_Mods.CopyInserters
                 var ci = PatchCopyInserters.cachedInserters;
                 if (ci.Count > 0)
                 {
-                    var targetPos = __instance.buildTargetPositionWanted;
-                    var entityPool = ___factory.entityPool;
-                    foreach (var inserter in ci)
+                    foreach (var buildPreview in __instance.buildPreviews)
                     {
-                        // Find the desired belt/building position
-                        // As delta doesn't work over distance, re-trace the Grid Snapped steps from the original
-                        // to find the target belt/building for this inserters other connection
-                        var currentPos = targetPos;
-                        for (int u = 0; u < inserter.snapCount; u++)
-                            currentPos = ___planetAux.Snap(currentPos + inserter.snapMoves[u], true, false);
-
-                        var testPos = currentPos;
-
-                        // Find the other entity at the target location
-                        int otherId = 0;
-                        for (int x = 1; x < ___factory.entityCursor; x++)
+                        var targetPos = __instance.previewPose.position + __instance.previewPose.rotation * buildPreview.lpos;
+                        var entityPool = ___factory.entityPool;
+                        foreach (var inserter in ci)
                         {
-                            if (entityPool[x].id == x)
+                            // Find the desired belt/building position
+                            // As delta doesn't work over distance, re-trace the Grid Snapped steps from the original
+                            // to find the target belt/building for this inserters other connection
+                            var currentPos = targetPos;
+                            for (int u = 0; u < inserter.snapCount; u++)
+                                currentPos = ___planetAux.Snap(currentPos + inserter.snapMoves[u], true, false);
+
+                            var testPos = currentPos;
+
+                            // Find the other entity at the target location
+                            int otherId = 0;
+                            for (int x = 1; x < ___factory.entityCursor; x++)
                             {
-                                var distance = Vector3.Distance(entityPool[x].pos, testPos);
-                                if (distance < 0.2)
+                                if (entityPool[x].id == x)
                                 {
-                                    otherId = entityPool[x].id;
-                                    break;
+                                    var distance = Vector3.Distance(entityPool[x].pos, testPos);
+                                    if (distance < 0.2)
+                                    {
+                                        otherId = entityPool[x].id;
+                                        break;
+                                    }
                                 }
                             }
-                        }
-                        
-                        if (otherId != 0)
-                        {
-                            // Order an inserter
-                            var pi = new PatchCopyInserters.PendingInserter();
-                            pi.otherId = otherId;
-                            pi.ci = inserter;
-                            pi.AssemblerPos = targetPos;
 
-                            PatchCopyInserters.pendingInserters.Add(pi);
+                            if (otherId != 0)
+                            {
+                                // Order an inserter
+                                var pi = new PatchCopyInserters.PendingInserter();
+                                pi.otherId = otherId;
+                                pi.ci = inserter;
+                                pi.AssemblerPos = targetPos;
+
+                                PatchCopyInserters.pendingInserters.Add(pi);
+                            }
                         }
                     }
                 }
