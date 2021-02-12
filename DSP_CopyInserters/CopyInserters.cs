@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace DSP_Mods.CopyInserters
 {
-    [BepInPlugin("org.fezeral.plugins.copyinserters", "Copy Inserters Plug-In", "1.0.0.0")]
+    [BepInPlugin("org.fezeral.plugins.copyinserters", "Copy Inserters Plug-In", "1.1.0.0")]
     class CopyInserters : BaseUnityPlugin
     {
         private static PlayerController _pc;
@@ -133,6 +133,8 @@ namespace DSP_Mods.CopyInserters
             public static void PlayerAction_BuildSetCopyInfoPostfix(ref PlanetFactory ___factory, int objectId, PlanetAuxData ___planetAux)
             {
                 cachedInserters.Clear(); // Remove previous copy info
+                if (objectId < 0) // Copied item is a ghost, no inserters to cache
+                    return;
 
                 var sourceEntity = objectId;
                 var sourcePos = ___factory.entityPool[objectId].pos;
