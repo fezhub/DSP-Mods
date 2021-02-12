@@ -73,7 +73,7 @@ namespace DSP_Mods.CopyInserters
                                 var pbdata = new PrebuildData();
                                 pbdata.protoId = (short)pi.ci.protoId;
                                 pbdata.modelIndex = (short)LDB.items.Select(pi.ci.protoId).ModelIndex;
-                                pbdata.modelId = factory.entityPool[pi.otherId].modelId;
+                                //pbdata.modelId = factory.entityPool[pi.otherId].modelId;
                                 pbdata.rot = pi.ci.rot;
                                 pbdata.rot2 = pi.ci.rot2;
 
