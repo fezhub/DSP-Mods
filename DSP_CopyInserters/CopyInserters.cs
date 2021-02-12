@@ -242,7 +242,7 @@ namespace DSP_Mods.CopyInserters
                 var ci = PatchCopyInserters.cachedInserters;
                 if (ci.Count > 0)
                 {
-                    var targetPos = __instance.buildTargetPositionWanted;
+                    var targetPos = pc.cmd.target;
                     var entityPool = ___factory.entityPool;
                     foreach (var inserter in ci)
                     {
