@@ -534,8 +534,18 @@ namespace DSP_Mods.CopyInserters
                 {
                     foreach (var buildPreview in __instance.buildPreviews)
                     {
-                        var targetPos = __instance.previewPose.position + __instance.previewPose.rotation * buildPreview.lpos;
-                        var targetRot = __instance.previewPose.rotation;
+                        Vector3 targetPos;
+                        Quaternion targetRot;
+                        if (__instance.buildPreviews.Count > 1)
+                        {
+                            targetPos = buildPreview.lpos;
+                            targetRot = buildPreview.lrot;
+                        }
+                        else
+                        {
+                            targetPos = __instance.previewPose.position + __instance.previewPose.rotation * buildPreview.lpos;
+                            targetRot = __instance.previewPose.rotation;
+                        }
                         var entityPool = ___factory.entityPool;
                         foreach (var inserter in ci)
                         {
