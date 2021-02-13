@@ -52,6 +52,116 @@ namespace DSP_Mods.CopyInserters
             internal static List<CachedInserter> cachedInserters; // During copy mode, cached info on inserters attached to the copied building
             internal static List<PendingInserter> pendingInserters; // Info on inserters for every unbuilt pasted building
 
+
+            /// <summary>
+            /// After any item has completed building, check if there are pendingInserters to request
+            /// </summary>
+            /// <param name="postObjId">The built entities object ID</param>
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(PlayerAction_Build), "DetermineBuildPreviews")]
+            public static void PlayerAction_BuildDetermineBuildPreviewsPostfix(PlayerAction_Build __instance)
+            {
+                // Do we have cached inserters?
+                var ci = PatchCopyInserters.cachedInserters;
+                if (ci.Count > 0)
+                {
+                    var bpCount = __instance.buildPreviews.Count;
+                    for (int i = 0; i < bpCount; i++)
+                    {
+                        var buildingPreview = __instance.buildPreviews[i];
+                        if (!buildingPreview.item.prefabDesc.isInserter)
+                        {
+                            foreach (var inserter in ci)
+                            {
+                                var bp = BuildPreview.CreateSingle(LDB.items.Select(inserter.protoId), LDB.items.Select(inserter.protoId).prefabDesc, true);
+                                bp.ResetInfos();
+                                
+                                bp.lpos = buildingPreview.lpos + buildingPreview.lrot * inserter.posDelta;
+                                bp.lrot = buildingPreview.lrot * inserter.rot;
+                                bp.lpos2 = buildingPreview.lpos + buildingPreview.lrot * inserter.pos2Delta;
+                                bp.lrot2 = buildingPreview.lrot * inserter.rot2;
+                                bp.ignoreCollider = true;
+                                __instance.AddBuildPreview(bp);
+                            }
+                        }
+                        
+                    }
+                    
+                }
+
+            }
+
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(PlayerAction_Build), "CheckBuildConditions")]
+            public static void PlayerAction_BuildCheckBuildConditionsPostfix(PlayerAction_Build __instance, ref bool __result)
+            {
+                var ci = PatchCopyInserters.cachedInserters;
+
+                if (ci.Count > 0)
+                {
+                    __instance.cursorText = __instance.prepareCursorText;
+                    __instance.prepareCursorText = string.Empty;
+                    __instance.cursorWarning = false;
+                    UICursor.SetCursor(ECursor.Default);
+                    var flag = true;
+                    for (int i = 0; i < __instance.buildPreviews.Count; i++)
+                    {
+                        BuildPreview buildPreview = __instance.buildPreviews[i];
+                        bool isInserter = buildPreview.desc.isInserter;
+
+                        if (isInserter && buildPreview.ignoreCollider && (buildPreview.condition == EBuildCondition.TooFar || buildPreview.condition == EBuildCondition.TooClose))
+                        {
+                            buildPreview.condition = EBuildCondition.Ok;
+                        } 
+                        
+                        if(buildPreview.condition != EBuildCondition.Ok)
+                        {
+                            flag = false;
+                            if (!__instance.cursorWarning)
+                            {
+                                __instance.cursorWarning = true;
+                                __instance.cursorText = buildPreview.conditionText;
+                            }
+                        }
+                    }
+
+                    if (!flag && !VFInput.onGUI)
+                    {
+                        UICursor.SetCursor(ECursor.Ban);
+                    }
+
+                    __result = flag;
+                }
+            }
+
+            [HarmonyPrefix]
+            [HarmonyPatch(typeof(PlayerAction_Build), "CreatePrebuilds")]
+            public static void PlayerAction_BuildCreatePrebuildsPrefix(PlayerAction_Build __instance)
+            {
+                var ci = PatchCopyInserters.cachedInserters;
+
+                if (ci.Count > 0)
+                {
+                    // for now we remove the inserters prebuilds
+                    if (__instance.waitConfirm && VFInput._buildConfirm.onDown && __instance.buildPreviews.Count > 0)
+                    {
+                        for (int i = __instance.buildPreviews.Count - 1; i >= 0; i--) // Reverse loop for removing found elements
+                        {
+                            var buildPreview = __instance.buildPreviews[i];
+                            bool isInserter = buildPreview.desc.isInserter;
+
+                            if (isInserter && buildPreview.ignoreCollider)
+                            {
+                                __instance.buildPreviews.RemoveAt(i);
+                                __instance.FreePreviewModel(buildPreview);
+                            }
+
+                        }
+                    }
+                }
+            }
+
+
             [HarmonyReversePatch]
             [HarmonyPatch(typeof(PlayerAction_Build), "DetermineBuildPreviews")]
             public static void CalculatePose(PlayerAction_Build __instance, int startObjId, int castObjId)
@@ -162,7 +272,7 @@ namespace DSP_Mods.CopyInserters
             public static void PlayerAction_BuildNotifyBuiltPrefix(PlayerAction_Build __instance, int postObjId, PlanetAuxData ___planetAux)
             {
                 var entityBuilt = pc.player.factory.entityPool[postObjId];
-                                
+
                 ModelProto modelProto = LDB.models.Select(entityBuilt.modelIndex);
                 var prefabDesc = modelProto.prefabDesc;
                 if (!prefabDesc.isInserter)
@@ -171,7 +281,7 @@ namespace DSP_Mods.CopyInserters
                     if (PatchCopyInserters.pendingInserters.Count > 0)
                     {
                         var factory = pc.player.factory;
-                        for(int i = pendingInserters.Count - 1; i >= 0; i--) // Reverse loop for removing found elements
+                        for (int i = pendingInserters.Count - 1; i >= 0; i--) // Reverse loop for removing found elements
                         {
                             var pi = pendingInserters[i];
                             // Is the NotifyBuilt assembler in the expected position for this pending inserter?
@@ -192,6 +302,9 @@ namespace DSP_Mods.CopyInserters
                                 // Calculate inserter start and end positions from stored deltas and the building's rotation
                                 pbdata.pos = ___planetAux.Snap(entityBuilt.pos + entityBuilt.rot * pi.ci.posDelta, true, false);
                                 pbdata.pos2 = ___planetAux.Snap(entityBuilt.pos + entityBuilt.rot * pi.ci.pos2Delta, true, false);
+                                // Get inserter rotation relative to the building's
+                                pbdata.rot = entityBuilt.rot * pi.ci.rot;
+                                pbdata.rot2 = entityBuilt.rot * pi.ci.rot2;
 
                                 if (!pi.ci.incoming)
                                 {
@@ -212,9 +325,10 @@ namespace DSP_Mods.CopyInserters
                                         {
                                             continue;
                                         }
-                                        float startDistance = Vector3.Distance(__instance.posePairs[j].startPose.position, pi.AssemblerPos + pi.ci.posDelta);
-                                        float endDistance = Vector3.Distance(__instance.posePairs[j].endPose.position, pi.AssemblerPos + pi.ci.pos2Delta);
-                                        float poseDistance = startDistance + endDistance + Mathf.Abs(__instance.posePairs[j].bias) * 0.0599999986588955f;
+                                        float startDistance = Vector3.Distance(__instance.posePairs[j].startPose.position, pbdata.pos);
+                                        float endDistance = Vector3.Distance(__instance.posePairs[j].endPose.position, pbdata.pos2);
+                                        float poseDistance = startDistance + endDistance;
+
                                         if (poseDistance < minDistance)
                                         {
                                             minDistance = poseDistance;
@@ -224,29 +338,15 @@ namespace DSP_Mods.CopyInserters
                                     }
                                     if (hasNearbyPose)
                                     {
-                                        pi.pos = bestFit.startPose.position;
-                                        pi.rot = bestFit.startPose.rotation;
-                                        pi.pos2 = bestFit.endPose.position;
-                                        pi.rot2 = bestFit.endPose.rotation * Quaternion.Euler(0.0f, 180f, 0.0f);
-                                        pi.poseSet = true;
+                                        // if we were able to calculate a close enough sensible pose
+                                        // use that instead of the (visually) ugly default
+
+                                        pbdata.pos = bestFit.startPose.position;
+                                        pbdata.pos2 = bestFit.endPose.position;
+
+                                        pbdata.rot = bestFit.startPose.rotation;
+                                        pbdata.rot2 = bestFit.endPose.rotation * Quaternion.Euler(0.0f, 180f, 0.0f);
                                     }
-                                }
-
-                                // if we were able to calculate a close enough sensible pose
-                                // use that instead of the (visually) ugly default
-                                if (pi.poseSet)
-                                {
-                                    pbdata.pos = pi.pos;
-                                    pbdata.pos2 = pi.pos2;
-
-                                    pbdata.rot = pi.rot;
-                                    pbdata.rot2 = pi.rot2;
-                                }
-                                else
-                                {
-                                    // Get inserter rotation relative to the building's
-                                    pbdata.rot = entityBuilt.rot * pi.ci.rot;
-                                    pbdata.rot2 = entityBuilt.rot * pi.ci.rot2;
                                 }
 
                                 // Check the player has the item in inventory, no cheating here
@@ -260,12 +360,12 @@ namespace DSP_Mods.CopyInserters
 
                                     // Otherslot -1 will try to find one, otherwise could cache this from original assembler if it causes problems
                                     if (pi.ci.incoming)
-                                    {                                        
+                                    {
                                         factory.WriteObjectConn(-pbCursor, 0, true, assemblerId, -1); // assembler connection                                        
                                         factory.WriteObjectConn(-pbCursor, 1, false, pi.otherId, -1); // other connection
                                     }
                                     else
-                                    {                                        
+                                    {
                                         factory.WriteObjectConn(-pbCursor, 0, false, assemblerId, -1); // assembler connection                                        
                                         factory.WriteObjectConn(-pbCursor, 1, true, pi.otherId, -1); // other connection
                                     }
@@ -274,7 +374,7 @@ namespace DSP_Mods.CopyInserters
                             }
                         }
                     }
-                }                
+                }
             }
 
             /// <summary>
@@ -335,7 +435,8 @@ namespace DSP_Mods.CopyInserters
                             ci.rot2 = Quaternion.Inverse(sourceRot) * inserter.rot2;
                             ci.posDelta = Quaternion.Inverse(sourceRot) * (inserterEntity.pos - sourcePos); // Delta from copied building to inserter pos
                             ci.pos2Delta = Quaternion.Inverse(sourceRot) * (inserter.pos2 - sourcePos); // Delta from copied building to inserter pos2
-                            
+
+
                             // compute the start and end slot that the cached inserter uses
                             if (!incoming)
                             {
@@ -438,7 +539,6 @@ namespace DSP_Mods.CopyInserters
                     {
                         var targetPos = __instance.previewPose.position + __instance.previewPose.rotation * buildPreview.lpos;
                         var targetRot = __instance.previewPose.rotation;
-
                         var entityPool = ___factory.entityPool;
                         foreach (var inserter in ci)
                         {
