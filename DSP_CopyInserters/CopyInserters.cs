@@ -1,4 +1,8 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Linq;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Reflection.Emit;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
@@ -25,7 +29,14 @@ namespace DSP_Mods.CopyInserters
         internal void Awake()
         {
             harmony = new Harmony("org.fezeral.plugins.copyinserters");
-            harmony.PatchAll(typeof(PatchCopyInserters));
+            try
+            {
+                harmony.PatchAll(typeof(PatchCopyInserters));
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.ToString());
+            }
 
             PatchCopyInserters.cachedInserters = new List<PatchCopyInserters.CachedInserter>();
             PatchCopyInserters.pendingInserters = new List<PatchCopyInserters.PendingInserter>();
@@ -41,13 +52,114 @@ namespace DSP_Mods.CopyInserters
             internal static List<CachedInserter> cachedInserters; // During copy mode, cached info on inserters attached to the copied building
             internal static List<PendingInserter> pendingInserters; // Info on inserters for every unbuilt pasted building
 
+            [HarmonyReversePatch]
+            [HarmonyPatch(typeof(PlayerAction_Build), "DetermineBuildPreviews")]
+            public static void CalculatePose(PlayerAction_Build __instance, int startObjId, int castObjId)
+            {
+                IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+                {
+                    List<CodeInstruction> instructionsList = instructions.ToList();
+
+                    // Find the idx at which the "cargoTraffic" field of the PlanetFactory
+                    // Is first accessed since this is the start of the instructions that compute posing
+
+                    /* ex of the code in dotpeek:
+                     * ```
+                     * if (this.cursorValid && this.startObjId != this.castObjId && (this.startObjId > 0 && this.castObjId > 0))
+                     * {
+                     *   CargoTraffic cargoTraffic = this.factory.cargoTraffic; <- WE WANT TO START WITH THIS LINE (INCLUSIVE)
+                     *   EntityData[] entityPool = this.factory.entityPool;
+                     *   BeltComponent[] beltPool = cargoTraffic.beltPool;
+                     *   this.posePairs.Clear();
+                     *   this.startSlots.Clear();
+                     * ```
+                     */
+
+                    int startIdx = -1;
+                    for (int i = 0; i < instructionsList.Count; i++)
+                    {
+                        if (instructionsList[i].LoadsField(typeof(PlanetFactory).GetField("cargoTraffic")))
+                        {
+                            startIdx = i - 2; // need the two proceeding lines that are ldarg.0 and ldfld PlayerAction_Build::factory
+                            break;
+                        }
+                    }
+                    if (startIdx == -1)
+                    {
+                        throw new InvalidOperationException("Cannot patch sorter posing code b/c the start indicator isn't present");
+                    }
+
+                    // Find the idx at which the "posePairs" field of the PlayerAction_Build
+                    // Is first accessed and followed by a call to get_Count
+
+                    /*
+                     * ex of the code in dotpeek:
+                     * ```
+                     *          else
+                     *              flag6 = true;
+                     *      }
+                     *      else
+                     *        flag6 = true;
+                     *    }
+                     *  }
+                     *  if (this.posePairs.Count > 0) <- WE WANT TO END ON THIS LINE (EXCLUSIVE)
+                     *  {
+                     *    float num1 = 1000f;
+                     *    float num2 = Vector3.Distance(this.currMouseRay.origin, this.cursorTarget) + 10f;
+                     *    PlayerAction_Build.PosePair posePair2 = new PlayerAction_Build.PosePair();
+                     * ```
+                     */
+
+                    int endIdx = -1;
+                    for (int i = startIdx; i < instructionsList.Count - 1; i++) // go to the end - 1 b/c we need to check two instructions to find valid loc
+                    {
+                        if (instructionsList[i].LoadsField(typeof(PlayerAction_Build).GetField("posePairs")))
+                        {
+                            if (instructionsList[i + 1].Calls(typeof(List<PlayerAction_Build.PosePair>).GetMethod("get_Count")))
+                            {
+                                endIdx = i - 1; // need the proceeding line that is ldarg.0
+                                break;
+                            }
+                        }
+                    }
+                    if (endIdx == -1)
+                    {
+                        throw new InvalidOperationException("Cannot patch sorter posing code b/c the end indicator isn't present");
+                    }
+
+                    // The first argument to an instance method (arg 0) is the instance itself
+                    // Since this is a static method, the instance will still need to be passed
+                    // For the IL instructions to work properly so manually pass the instance as
+                    // The first argument to the method.
+                    List<CodeInstruction> code = new List<CodeInstruction>()
+                    {
+                        new CodeInstruction(OpCodes.Ldarg_0),
+                        new CodeInstruction(OpCodes.Ldarg_1),
+                        CodeInstruction.StoreField(typeof(PlayerAction_Build), "startObjId"),
+                        new CodeInstruction(OpCodes.Ldarg_0),
+                        new CodeInstruction(OpCodes.Ldarg_2),
+                        CodeInstruction.StoreField(typeof(PlayerAction_Build), "castObjId"),
+                    };
+
+                    for (int i = startIdx; i < endIdx; i++)
+                    {
+                        code.Add(instructionsList[i]);
+                    }
+                    return code.AsEnumerable();
+                }
+
+                // make compiler happy
+                _ = Transpiler(null);
+                return;
+            }
+
             /// <summary>
             /// After any item has completed building, check if there are pendingInserters to request
             /// </summary>
             /// <param name="postObjId">The built entities object ID</param>
             [HarmonyPrefix]
             [HarmonyPatch(typeof(PlayerAction_Build), "NotifyBuilt")]
-            public static void PlayerAction_BuildNotifyBuiltPrefix(int postObjId, PlanetAuxData ___planetAux)
+            public static void PlayerAction_BuildNotifyBuiltPrefix(PlayerAction_Build __instance, int postObjId, PlanetAuxData ___planetAux)
             {
                 var entityBuilt = pc.player.factory.entityPool[postObjId];
                                 
@@ -67,17 +179,12 @@ namespace DSP_Mods.CopyInserters
                             if (distance < 0.2)
                             {
                                 var assemblerId = entityBuilt.id;
-                                //Debug.Log($"!!! found assembler id={assemblerId} at Pos={entityBuilt.pos} expected {pi.AssemblerPos} distance={distance}");
-                                
+
                                 // Create inserter Prebuild data
                                 var pbdata = new PrebuildData();
                                 pbdata.protoId = (short)pi.ci.protoId;
                                 pbdata.modelIndex = (short)LDB.items.Select(pi.ci.protoId).ModelIndex;
 
-                                // Get inserter rotation relative to the building's
-                                pbdata.rot = entityBuilt.rot * pi.ci.rot;
-                                pbdata.rot2 = entityBuilt.rot * pi.ci.rot2;
-                                
                                 pbdata.insertOffset = pi.ci.insertOffset;
                                 pbdata.pickOffset = pi.ci.pickOffset;
                                 pbdata.filterId = pi.ci.filterId;
@@ -85,6 +192,62 @@ namespace DSP_Mods.CopyInserters
                                 // Calculate inserter start and end positions from stored deltas and the building's rotation
                                 pbdata.pos = ___planetAux.Snap(entityBuilt.pos + entityBuilt.rot * pi.ci.posDelta, true, false);
                                 pbdata.pos2 = ___planetAux.Snap(entityBuilt.pos + entityBuilt.rot * pi.ci.pos2Delta, true, false);
+
+                                if (!pi.ci.incoming)
+                                {
+                                    CalculatePose(__instance, assemblerId, pi.otherId);
+                                }
+                                else
+                                {
+                                    CalculatePose(__instance, pi.otherId, assemblerId);
+                                }
+                                if (__instance.posePairs.Count > 0)
+                                {
+                                    float minDistance = 1000f;
+                                    PlayerAction_Build.PosePair bestFit = new PlayerAction_Build.PosePair();
+                                    bool hasNearbyPose = false;
+                                    for (int j = 0; j < __instance.posePairs.Count; ++j)
+                                    {
+                                        if (__instance.posePairs[j].startSlot != pi.ci.startSlot || __instance.posePairs[j].endSlot != pi.ci.endSlot)
+                                        {
+                                            continue;
+                                        }
+                                        float startDistance = Vector3.Distance(__instance.posePairs[j].startPose.position, pi.AssemblerPos + pi.ci.posDelta);
+                                        float endDistance = Vector3.Distance(__instance.posePairs[j].endPose.position, pi.AssemblerPos + pi.ci.pos2Delta);
+                                        float poseDistance = startDistance + endDistance + Mathf.Abs(__instance.posePairs[j].bias) * 0.0599999986588955f;
+                                        if (poseDistance < minDistance)
+                                        {
+                                            minDistance = poseDistance;
+                                            bestFit = __instance.posePairs[j];
+                                            hasNearbyPose = true;
+                                        }
+                                    }
+                                    if (hasNearbyPose)
+                                    {
+                                        pi.pos = bestFit.startPose.position;
+                                        pi.rot = bestFit.startPose.rotation;
+                                        pi.pos2 = bestFit.endPose.position;
+                                        pi.rot2 = bestFit.endPose.rotation * Quaternion.Euler(0.0f, 180f, 0.0f);
+                                        pi.poseSet = true;
+                                    }
+                                }
+
+                                // if we were able to calculate a close enough sensible pose
+                                // use that instead of the (visually) ugly default
+                                if (pi.poseSet)
+                                {
+                                    pbdata.pos = pi.pos;
+                                    pbdata.pos2 = pi.pos2;
+
+                                    pbdata.rot = pi.rot;
+                                    pbdata.rot2 = pi.rot2;
+                                }
+                                else
+                                {
+                                    // Get inserter rotation relative to the building's
+                                    pbdata.rot = entityBuilt.rot * pi.ci.rot;
+                                    pbdata.rot2 = entityBuilt.rot * pi.ci.rot2;
+                                }
 
                                 // Check the player has the item in inventory, no cheating here
                                 var itemcount = pc.player.package.GetItemCount(pi.ci.protoId);
@@ -119,7 +282,7 @@ namespace DSP_Mods.CopyInserters
             /// </summary>
             [HarmonyPostfix]
             [HarmonyPatch(typeof(PlayerAction_Build), "SetCopyInfo")]
-            public static void PlayerAction_BuildSetCopyInfoPostfix(ref PlanetFactory ___factory, int objectId, PlanetAuxData ___planetAux)
+            public static void PlayerAction_BuildSetCopyInfoPostfix(PlayerAction_Build __instance, ref PlanetFactory ___factory, int objectId, PlanetAuxData ___planetAux)
             {
                 cachedInserters.Clear(); // Remove previous copy info
                 if (objectId < 0) // Copied item is a ghost, no inserters to cache
@@ -131,6 +294,7 @@ namespace DSP_Mods.CopyInserters
                 // Find connected inserters
                 var inserterPool = ___factory.factorySystem.inserterPool;
                 var entityPool = ___factory.entityPool;
+
                 for (int i = 1; i < ___factory.factorySystem.inserterCursor; i++)
                 {
                     if (inserterPool[i].id == i)
@@ -171,6 +335,41 @@ namespace DSP_Mods.CopyInserters
                             ci.rot2 = Quaternion.Inverse(sourceRot) * inserter.rot2;
                             ci.posDelta = Quaternion.Inverse(sourceRot) * (inserterEntity.pos - sourcePos); // Delta from copied building to inserter pos
                             ci.pos2Delta = Quaternion.Inverse(sourceRot) * (inserter.pos2 - sourcePos); // Delta from copied building to inserter pos2
+                            
+                            // compute the start and end slot that the cached inserter uses
+                            if (!incoming)
+                            {
+                                CalculatePose(__instance, sourceEntity, otherId);
+                            }
+                            else
+                            {
+                                CalculatePose(__instance, otherId, sourceEntity);
+                            }
+
+                            if (__instance.posePairs.Count > 0)
+                            {
+                                float minDistance = 1000f;
+                                PlayerAction_Build.PosePair bestFit = new PlayerAction_Build.PosePair();
+                                bool hasNearbyPose = false;
+                                for (int j = 0; j < __instance.posePairs.Count; ++j)
+                                {
+                                    float startDistance = Vector3.Distance(__instance.posePairs[j].startPose.position, inserterEntity.pos);
+                                    float endDistance = Vector3.Distance(__instance.posePairs[j].endPose.position, inserter.pos2);
+                                    float poseDistance = startDistance + endDistance;
+
+                                    if (poseDistance < minDistance)
+                                    {
+                                        minDistance = poseDistance;
+                                        bestFit = __instance.posePairs[j];
+                                        hasNearbyPose = true;
+                                    }
+                                }
+                                if (hasNearbyPose)
+                                {
+                                    ci.startSlot = bestFit.startSlot;
+                                    ci.endSlot = bestFit.endSlot;
+                                }
+                            }
 
                             // not important?
                             ci.pickOffset = inserter.pickOffset;
@@ -195,6 +394,8 @@ namespace DSP_Mods.CopyInserters
             {
                 public int protoId;
                 public bool incoming;
+                public int startSlot;
+                public int endSlot;
                 public Vector3 posDelta;
                 public Vector3 pos2Delta;
                 public Quaternion rot;
@@ -214,6 +415,11 @@ namespace DSP_Mods.CopyInserters
                 public CachedInserter ci;
                 public int otherId;
                 public Vector3 AssemblerPos;
+                public Vector3 pos;
+                public Vector3 pos2;
+                public Quaternion rot;
+                public Quaternion rot2;
+                public bool poseSet;
             }
 
 
@@ -240,7 +446,7 @@ namespace DSP_Mods.CopyInserters
                             // As delta doesn't work over distance, re-trace the Grid Snapped steps from the original
                             // to find the target belt/building for this inserters other connection
                             var testPos = targetPos;
-                            // Note: rotate's each move relative to the rotation of the new building
+                            // Note: rotates each move relative to the rotation of the new building
                             for (int u = 0; u < inserter.snapCount; u++)
                                 testPos = ___planetAux.Snap(testPos + targetRot * inserter.snapMoves[u], true, false);
 
