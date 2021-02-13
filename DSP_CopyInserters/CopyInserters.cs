@@ -1,7 +1,6 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Reflection.Emit;
 using BepInEx;
 using HarmonyLib;
@@ -109,7 +108,10 @@ namespace DSP_Mods.CopyInserters
                         BuildPreview buildPreview = __instance.buildPreviews[i];
                         bool isInserter = buildPreview.desc.isInserter;
 
-                        if (isInserter && buildPreview.ignoreCollider && (buildPreview.condition == EBuildCondition.TooFar || buildPreview.condition == EBuildCondition.TooClose))
+                        if (isInserter && buildPreview.ignoreCollider && (
+                            buildPreview.condition == EBuildCondition.TooFar ||
+                            buildPreview.condition == EBuildCondition.TooClose ||
+                            buildPreview.condition == EBuildCondition.OutOfReach))
                         {
                             buildPreview.condition = EBuildCondition.Ok;
                         } 
@@ -516,11 +518,6 @@ namespace DSP_Mods.CopyInserters
                 public CachedInserter ci;
                 public int otherId;
                 public Vector3 AssemblerPos;
-                public Vector3 pos;
-                public Vector3 pos2;
-                public Quaternion rot;
-                public Quaternion rot2;
-                public bool poseSet;
             }
 
 
