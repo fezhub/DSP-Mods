@@ -59,7 +59,7 @@ namespace DSP_Mods.CopyInserters
                     if (PatchCopyInserters.pendingInserters.Count > 0)
                     {
                         var factory = pc.player.factory;
-                        for(int i = pendingInserters.Count -1; i >= 0; i--) // Reverse loop for removing found elements
+                        for(int i = pendingInserters.Count - 1; i >= 0; i--) // Reverse loop for removing found elements
                         {
                             var pi = pendingInserters[i];
                             // Is the NotifyBuilt assembler in the expected position for this pending inserter?
@@ -73,29 +73,18 @@ namespace DSP_Mods.CopyInserters
                                 var pbdata = new PrebuildData();
                                 pbdata.protoId = (short)pi.ci.protoId;
                                 pbdata.modelIndex = (short)LDB.items.Select(pi.ci.protoId).ModelIndex;
-                                //pbdata.modelId = factory.entityPool[pi.otherId].modelId;
-                                pbdata.rot = pi.ci.rot;
-                                pbdata.rot2 = pi.ci.rot2;
 
-                                // Copy rot from building, smelters have problems here
-                                pbdata.rot = entityBuilt.rot;
-                                pbdata.rot2 = entityBuilt.rot;
+                                // Get inserter rotation relative to the building's
+                                pbdata.rot = entityBuilt.rot * pi.ci.rot;
+                                pbdata.rot2 = entityBuilt.rot * pi.ci.rot2;
                                 
                                 pbdata.insertOffset = pi.ci.insertOffset;
                                 pbdata.pickOffset = pi.ci.pickOffset;
                                 pbdata.filterId = pi.ci.filterId;
-                                
-                                // Calculate inserter start and end positions from stored delta's
-                                pbdata.pos = entityBuilt.pos + pi.ci.posDelta;
-                                pbdata.pos = ___planetAux.Snap(pbdata.pos, true, false);
-                                pbdata.pos2 = ___planetAux.Snap(pbdata.pos + pi.ci.pos2delta, true, false);
 
-                                // Reverse positions for inserters that unload the copied building
-                                if (!pi.ci.incoming)
-                                {
-                                    pbdata.pos = ___planetAux.Snap(entityBuilt.pos - pi.ci.posDelta, true, false);
-                                    pbdata.pos2 = ___planetAux.Snap(pbdata.pos + pi.ci.pos2delta, true, false);
-                                }
+                                // Calculate inserter start and end positions from stored deltas and the building's rotation
+                                pbdata.pos = ___planetAux.Snap(entityBuilt.pos + entityBuilt.rot * pi.ci.posDelta, true, false);
+                                pbdata.pos2 = ___planetAux.Snap(entityBuilt.pos + entityBuilt.rot * pi.ci.pos2Delta, true, false);
 
                                 // Check the player has the item in inventory, no cheating here
                                 var itemcount = pc.player.package.GetItemCount(pi.ci.protoId);
@@ -138,8 +127,8 @@ namespace DSP_Mods.CopyInserters
 
                 var sourceEntity = objectId;
                 var sourcePos = ___factory.entityPool[objectId].pos;
-                // Find connected inserters                
-                int matches = 0;
+                var sourceRot = ___factory.entityPool[objectId].rot;
+                // Find connected inserters
                 var inserterPool = ___factory.factorySystem.inserterPool;
                 var entityPool = ___factory.entityPool;
                 for (int i = 1; i < ___factory.factorySystem.inserterCursor; i++)
@@ -147,42 +136,41 @@ namespace DSP_Mods.CopyInserters
                     if (inserterPool[i].id == i)
                     {
                         var inserter = inserterPool[i];
+                        var inserterEntity = entityPool[inserter.entityId];
+
                         var pickTarget = inserter.pickTarget;
                         var insertTarget = inserter.insertTarget;
+
                         if (pickTarget == sourceEntity || insertTarget == sourceEntity)
                         {
-                            matches++;
-                            var inserterType = ___factory.entityPool[inserter.entityId].protoId;
                             bool incoming = insertTarget == sourceEntity;
                             var otherId = incoming ? pickTarget : insertTarget; // The belt or other building this inserter is attached to
-                            var otherPos = ___factory.entityPool[otherId].pos;
+                            var otherPos = entityPool[otherId].pos;
 
-                            // Store the Grid-Snapped moves from assembler to belt/other                            
-                            Vector3 begin = sourcePos;
-                            Vector3 end = otherPos;
+                            // Store the Grid-Snapped moves from assembler to belt/other
                             int path = 0;
                             Vector3[] snaps = new Vector3[6];
-                            var snappedPointCount = ___planetAux.SnapLineNonAlloc(begin, end, ref path, snaps);
-                            Vector3 lastSnap = begin;
+                            var snappedPointCount = ___planetAux.SnapLineNonAlloc(sourcePos, otherPos, ref path, snaps);
+                            Vector3 lastSnap = sourcePos;
                             Vector3[] snapMoves = new Vector3[snappedPointCount];
                             for (int s = 0; s < snappedPointCount; s++)
                             {
-                                Vector3 snapMove = snaps[s] - lastSnap;
+                                // note: reverse rotation of the delta so that rotation works
+                                Vector3 snapMove = Quaternion.Inverse(sourceRot) * (snaps[s] - lastSnap);
                                 snapMoves[s] = snapMove;
                                 lastSnap = snaps[s];
                             }
 
                             // Cache info for this inserter
                             var ci = new CachedInserter();
-                            ci.otherDelta = (otherPos - sourcePos); // Delta from copied building to other belt/building
                             ci.incoming = incoming;
-                            ci.protoId = inserterType;
-                            ci.rot = ___factory.entityPool[inserter.entityId].rot;
-                            ci.rot2 = inserter.rot2;
-                            ci.pos2delta = (inserter.pos2 - entityPool[inserter.entityId].pos); // Delta from inserter pos2 to copied building
-                            var posDelta = entityPool[inserter.entityId].pos - sourcePos; // Delta from copied building to inserter pos
-                            if (!incoming) posDelta = sourcePos - entityPool[inserter.entityId].pos; // Reverse for outgoing inserters
-                            ci.posDelta = posDelta;
+                            ci.protoId = inserterEntity.protoId;
+
+                            // rotations + deltas relative to the source building's rotation
+                            ci.rot = Quaternion.Inverse(sourceRot) * inserterEntity.rot;
+                            ci.rot2 = Quaternion.Inverse(sourceRot) * inserter.rot2;
+                            ci.posDelta = Quaternion.Inverse(sourceRot) * (inserterEntity.pos - sourcePos); // Delta from copied building to inserter pos
+                            ci.pos2Delta = Quaternion.Inverse(sourceRot) * (inserter.pos2 - sourcePos); // Delta from copied building to inserter pos2
 
                             // not important?
                             ci.pickOffset = inserter.pickOffset;
@@ -190,7 +178,6 @@ namespace DSP_Mods.CopyInserters
                             // needed for pose?
                             ci.t1 = inserter.t1;
                             ci.t2 = inserter.t2;
-                            
 
                             ci.filterId = inserter.filter;
                             ci.snapMoves = snapMoves;
@@ -209,8 +196,7 @@ namespace DSP_Mods.CopyInserters
                 public int protoId;
                 public bool incoming;
                 public Vector3 posDelta;
-                public Vector3 pos2delta;
-                public Vector3 otherDelta;
+                public Vector3 pos2Delta;
                 public Quaternion rot;
                 public Quaternion rot2;
                 public short pickOffset;
@@ -245,17 +231,18 @@ namespace DSP_Mods.CopyInserters
                     foreach (var buildPreview in __instance.buildPreviews)
                     {
                         var targetPos = __instance.previewPose.position + __instance.previewPose.rotation * buildPreview.lpos;
+                        var targetRot = __instance.previewPose.rotation;
+
                         var entityPool = ___factory.entityPool;
                         foreach (var inserter in ci)
                         {
                             // Find the desired belt/building position
                             // As delta doesn't work over distance, re-trace the Grid Snapped steps from the original
                             // to find the target belt/building for this inserters other connection
-                            var currentPos = targetPos;
+                            var testPos = targetPos;
+                            // Note: rotate's each move relative to the rotation of the new building
                             for (int u = 0; u < inserter.snapCount; u++)
-                                currentPos = ___planetAux.Snap(currentPos + inserter.snapMoves[u], true, false);
-
-                            var testPos = currentPos;
+                                testPos = ___planetAux.Snap(testPos + targetRot * inserter.snapMoves[u], true, false);
 
                             // Find the other entity at the target location
                             int otherId = 0;
