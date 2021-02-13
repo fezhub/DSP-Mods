@@ -65,7 +65,8 @@ namespace DSP_Mods.CopyInserters
                 var ci = PatchCopyInserters.cachedInserters;
                 if (ci.Count > 0)
                 {
-                    for (int i = 0; i < __instance.buildPreviews.Count; i++)
+                    var bpCount = __instance.buildPreviews.Count;
+                    for (int i = 0; i < bpCount; i++)
                     {
                         var buildingPreview = __instance.buildPreviews[i];
                         if (!buildingPreview.item.prefabDesc.isInserter)
