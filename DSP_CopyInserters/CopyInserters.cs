@@ -179,7 +179,27 @@ namespace DSP_Mods.CopyInserters
                             if (distance < 0.2)
                             {
                                 var assemblerId = entityBuilt.id;
-                                //Debug.Log($"!!! found assembler id={assemblerId} at Pos={entityBuilt.pos} expected {pi.AssemblerPos} distance={distance}");
+
+                                // Create inserter Prebuild data
+                                var pbdata = new PrebuildData();
+                                pbdata.protoId = (short)pi.ci.protoId;
+                                pbdata.modelIndex = (short)LDB.items.Select(pi.ci.protoId).ModelIndex;
+
+                                pbdata.insertOffset = pi.ci.insertOffset;
+                                pbdata.pickOffset = pi.ci.pickOffset;
+                                pbdata.filterId = pi.ci.filterId;
+
+                                // Calculate inserter start and end positions from stored delta's
+                                pbdata.pos = entityBuilt.pos + pi.ci.posDelta;
+                                pbdata.pos = ___planetAux.Snap(pbdata.pos, true, false);
+                                pbdata.pos2 = ___planetAux.Snap(pbdata.pos + pi.ci.pos2delta, true, false);
+
+                                // Reverse positions for inserters that unload the copied building
+                                if (!pi.ci.incoming)
+                                {
+                                    pbdata.pos = ___planetAux.Snap(entityBuilt.pos - pi.ci.posDelta, true, false);
+                                    pbdata.pos2 = ___planetAux.Snap(pbdata.pos + pi.ci.pos2delta, true, false);
+                                }
 
                                 if (!pi.ci.incoming)
                                 {
@@ -196,6 +216,10 @@ namespace DSP_Mods.CopyInserters
                                     bool hasNearbyPose = false;
                                     for (int j = 0; j < __instance.posePairs.Count; ++j)
                                     {
+                                        if (__instance.posePairs[j].startSlot != pi.ci.startSlot || __instance.posePairs[j].endSlot != pi.ci.endSlot)
+                                        {
+                                            continue;
+                                        }
                                         float startDistance = Vector3.Distance(__instance.posePairs[j].startPose.position, pi.AssemblerPos + pi.ci.posDelta * (pi.ci.incoming ? 1f : -1f));
                                         float endDistance = Vector3.Distance(__instance.posePairs[j].endPose.position, pi.AssemblerPos + pi.ci.pos2delta);
                                         float poseDistance = startDistance + endDistance + Mathf.Abs(__instance.posePairs[j].bias) * 0.0599999986588955f;
@@ -216,41 +240,21 @@ namespace DSP_Mods.CopyInserters
                                     }
                                 }
 
-
-                                // Create inserter Prebuild data
-                                var pbdata = new PrebuildData();
-                                pbdata.protoId = (short)pi.ci.protoId;
-                                pbdata.modelIndex = (short)LDB.items.Select(pi.ci.protoId).ModelIndex;
-                                //pbdata.modelId = factory.entityPool[pi.otherId].modelId;
-                                pbdata.rot = pi.ci.rot;
-                                pbdata.rot2 = pi.ci.rot2;
-
-                                // Copy rot from building, smelters have problems here
-                                pbdata.rot = entityBuilt.rot;
-                                pbdata.rot2 = entityBuilt.rot;
-                                
-                                pbdata.insertOffset = pi.ci.insertOffset;
-                                pbdata.pickOffset = pi.ci.pickOffset;
-                                pbdata.filterId = pi.ci.filterId;
-                                
-                                // Calculate inserter start and end positions from stored delta's
-                                pbdata.pos = entityBuilt.pos + pi.ci.posDelta;
-                                pbdata.pos = ___planetAux.Snap(pbdata.pos, true, false);
-                                pbdata.pos2 = ___planetAux.Snap(pbdata.pos + pi.ci.pos2delta, true, false);
-
                                 // if we were able to calculate a close enough sensible pose
                                 // use that instead of the (visually) ugly default
                                 if (pi.poseSet)
                                 {
                                     pbdata.pos = pi.pos;
-                                    pbdata.rot = pi.rot;
                                     pbdata.pos2 = pi.pos2;
+
+                                    pbdata.rot = pi.rot;
                                     pbdata.rot2 = pi.rot2;
                                 }
                                 else
                                 {
-                                    pbdata.pos = ___planetAux.Snap(entityBuilt.pos - pi.ci.posDelta, true, false);
-                                    pbdata.pos2 = ___planetAux.Snap(pbdata.pos + pi.ci.pos2delta, true, false);
+                                    // Copy rot from building, smelters have problems here
+                                    pbdata.rot = entityBuilt.rot;
+                                    pbdata.rot2 = entityBuilt.rot;
                                 }
 
                                 // Check the player has the item in inventory, no cheating here
@@ -286,7 +290,7 @@ namespace DSP_Mods.CopyInserters
             /// </summary>
             [HarmonyPostfix]
             [HarmonyPatch(typeof(PlayerAction_Build), "SetCopyInfo")]
-            public static void PlayerAction_BuildSetCopyInfoPostfix(ref PlanetFactory ___factory, int objectId, PlanetAuxData ___planetAux)
+            public static void PlayerAction_BuildSetCopyInfoPostfix(PlayerAction_Build __instance, ref PlanetFactory ___factory, int objectId, PlanetAuxData ___planetAux)
             {
                 cachedInserters.Clear(); // Remove previous copy info
                 if (objectId < 0) // Copied item is a ghost, no inserters to cache
@@ -298,6 +302,7 @@ namespace DSP_Mods.CopyInserters
                 int matches = 0;
                 var inserterPool = ___factory.factorySystem.inserterPool;
                 var entityPool = ___factory.entityPool;
+
                 for (int i = 1; i < ___factory.factorySystem.inserterCursor; i++)
                 {
                     if (inserterPool[i].id == i)
@@ -339,6 +344,42 @@ namespace DSP_Mods.CopyInserters
                             var posDelta = entityPool[inserter.entityId].pos - sourcePos; // Delta from copied building to inserter pos
                             if (!incoming) posDelta = sourcePos - entityPool[inserter.entityId].pos; // Reverse for outgoing inserters
                             ci.posDelta = posDelta;
+                            
+                            
+                            // compute the start and end slot that the cached inserter uses
+                            if (!incoming)
+                            {
+                                CalculatePose(__instance, sourceEntity, otherId);
+                            }
+                            else
+                            {
+                                CalculatePose(__instance, otherId, sourceEntity);
+                            }
+
+                            if (__instance.posePairs.Count > 0)
+                            {
+                                float minDistance = 1000f;
+                                PlayerAction_Build.PosePair bestFit = new PlayerAction_Build.PosePair();
+                                bool hasNearbyPose = false;
+                                for (int j = 0; j < __instance.posePairs.Count; ++j)
+                                {
+                                    float startDistance = Vector3.Distance(__instance.posePairs[j].startPose.position, entityPool[inserter.entityId].pos);
+                                    float endDistance = Vector3.Distance(__instance.posePairs[j].endPose.position, inserter.pos2);
+                                    float poseDistance = startDistance + endDistance;
+
+                                    if (poseDistance < minDistance)
+                                    {
+                                        minDistance = poseDistance;
+                                        bestFit = __instance.posePairs[j];
+                                        hasNearbyPose = true;
+                                    }
+                                }
+                                if (hasNearbyPose)
+                                {
+                                    ci.startSlot = bestFit.startSlot;
+                                    ci.endSlot = bestFit.endSlot;
+                                }
+                            }
 
                             // not important?
                             ci.pickOffset = inserter.pickOffset;
@@ -364,6 +405,8 @@ namespace DSP_Mods.CopyInserters
             {
                 public int protoId;
                 public bool incoming;
+                public int startSlot;
+                public int endSlot;
                 public Vector3 posDelta;
                 public Vector3 pos2delta;
                 public Vector3 otherDelta;
