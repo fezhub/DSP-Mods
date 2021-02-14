@@ -341,6 +341,8 @@ namespace DSP_Mods.CopyInserters
                                 pbdata.pickOffset = pi.ci.pickOffset;
                                 pbdata.filterId = pi.ci.filterId;
 
+                                pbdata.refCount = pi.ci.refCount;
+
                                 // Calculate inserter start and end positions from stored deltas and the building's rotation
                                 pbdata.pos = ___planetAux.Snap(entityBuilt.pos + entityBuilt.rot * pi.ci.posDelta, true, false);
                                 pbdata.pos2 = ___planetAux.Snap(entityBuilt.pos + entityBuilt.rot * pi.ci.pos2Delta, true, false);
@@ -478,7 +480,8 @@ namespace DSP_Mods.CopyInserters
                             ci.posDelta = Quaternion.Inverse(sourceRot) * (inserterEntity.pos - sourcePos); // Delta from copied building to inserter pos
                             ci.pos2Delta = Quaternion.Inverse(sourceRot) * (inserter.pos2 - sourcePos); // Delta from copied building to inserter pos2
 
-
+                            ItemProto itemProto = LDB.items.Select(ci.protoId);
+                            ci.refCount = Mathf.RoundToInt((float)(inserter.stt - 0.499f) / itemProto.prefabDesc.inserterSTT);
                             // compute the start and end slot that the cached inserter uses
                             if (!incoming)
                             {
@@ -550,6 +553,7 @@ namespace DSP_Mods.CopyInserters
                 public int filterId;
                 public Vector3[] snapMoves;
                 public int snapCount;
+                public int refCount;
             }
 
             //For inserters that need to be built when assembler is ready
