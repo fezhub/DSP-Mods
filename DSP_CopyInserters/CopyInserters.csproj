@@ -111,6 +111,6 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>copy G:\DSPmods\DSP-Mods\DSP_CopyInserters\bin\Debug\CopyInserters.dll "G:\SteamLibrary\steamapps\common\Dyson Sphere Program\BepInEx\scripts"</PostBuildEvent>
+    <PostBuildEvent>copy $(TargetPath) "C:\Program Files (x86)\Steam\steamapps\common\Dyson Sphere Program\BepInEx\scripts\$(TargetFileName)</PostBuildEvent>
   </PropertyGroup>
 </Project>

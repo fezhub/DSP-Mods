@@ -5,12 +5,24 @@ using System.Reflection.Emit;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace DSP_Mods.CopyInserters
 {
     [BepInPlugin("org.fezeral.plugins.copyinserters", "Copy Inserters Plug-In", "1.1.0.0")]
     class CopyInserters : BaseUnityPlugin
     {
+        public static bool copyEnabled = true;
+        public static List<UIKeyTipNode> allTips;
+        public static UIKeyTipNode tip;
+        void Update()
+        {
+  
+            if (Input.GetKeyUp(KeyCode.LeftControl))
+            {
+                copyEnabled = !copyEnabled;
+            }
+        }
         private static PlayerController _pc;
         internal static PlayerController pc
         {
@@ -31,6 +43,7 @@ namespace DSP_Mods.CopyInserters
             try
             {
                 harmony.PatchAll(typeof(PatchCopyInserters));
+                harmony.PatchAll(typeof(CopyInserters));
             }
             catch (Exception e)
             {
@@ -43,6 +56,32 @@ namespace DSP_Mods.CopyInserters
         internal void OnDestroy()
         {
             harmony.UnpatchSelf();  // For ScriptEngine hot-reloading
+            allTips.Remove(tip);
+        }
+
+        public static bool IsCopyAvailable()
+        {
+            return UIGame.viewMode == EViewMode.Build && pc.cmd.mode == 1 && PatchCopyInserters.cachedInserters.Count > 0;
+        }
+
+        [HarmonyPrefix, HarmonyPatch(typeof(UIKeyTips), "UpdateTipDesiredState")]
+        public static void UpdateTipDesiredStatePatch(UIKeyTips __instance, ref List<UIKeyTipNode> ___allTips)
+        {
+            if (!tip)
+            {
+                allTips = ___allTips;
+                tip = __instance.RegisterTip("L-CTRL", "Toggle inserters copy");
+            }
+            tip.desired = IsCopyAvailable();
+        }
+
+        [HarmonyPostfix, HarmonyPriority(Priority.Last), HarmonyPatch(typeof(UIGeneralTips), "_OnUpdate")]
+        public static void TipsPatch(ref Text ___modeText)
+        {
+        if (IsCopyAvailable() && copyEnabled)
+            {
+                ___modeText.text += " - Copy inserters";
+            }
         }
 
         [HarmonyPatch]
@@ -61,8 +100,9 @@ namespace DSP_Mods.CopyInserters
             public static void PlayerAction_BuildDetermineBuildPreviewsPostfix(PlayerAction_Build __instance)
             {
                 // Do we have cached inserters?
+
                 var ci = PatchCopyInserters.cachedInserters;
-                if (ci.Count > 0)
+                if (CopyInserters.copyEnabled && ci.Count > 0)
                 {
                     var bpCount = __instance.buildPreviews.Count;
                     for (int i = 0; i < bpCount; i++)
@@ -90,13 +130,15 @@ namespace DSP_Mods.CopyInserters
 
             }
 
+
+
             [HarmonyPostfix]
             [HarmonyPatch(typeof(PlayerAction_Build), "CheckBuildConditions")]
             public static void PlayerAction_BuildCheckBuildConditionsPostfix(PlayerAction_Build __instance, ref bool __result)
             {
                 var ci = PatchCopyInserters.cachedInserters;
 
-                if (ci.Count > 0)
+                if (CopyInserters.copyEnabled && ci.Count > 0)
                 {
                     __instance.cursorText = __instance.prepareCursorText;
                     __instance.prepareCursorText = string.Empty;
@@ -141,24 +183,22 @@ namespace DSP_Mods.CopyInserters
             public static void PlayerAction_BuildCreatePrebuildsPrefix(PlayerAction_Build __instance)
             {
                 var ci = PatchCopyInserters.cachedInserters;
-
-                if (ci.Count > 0)
+                if (CopyInserters.copyEnabled && ci.Count > 0) 
                 {
-                    // for now we remove the inserters prebuilds
                     if (__instance.waitConfirm && VFInput._buildConfirm.onDown && __instance.buildPreviews.Count > 0)
                     {
+                        // for now we remove the inserters prebuilds
                         for (int i = __instance.buildPreviews.Count - 1; i >= 0; i--) // Reverse loop for removing found elements
-                        {
-                            var buildPreview = __instance.buildPreviews[i];
-                            bool isInserter = buildPreview.desc.isInserter;
-
-                            if (isInserter && buildPreview.ignoreCollider)
                             {
-                                __instance.buildPreviews.RemoveAt(i);
-                                __instance.FreePreviewModel(buildPreview);
-                            }
+                                var buildPreview = __instance.buildPreviews[i];
+                                bool isInserter = buildPreview.desc.isInserter;
 
-                        }
+                                if (isInserter && buildPreview.ignoreCollider)
+                                {
+                                    __instance.buildPreviews.RemoveAt(i);
+                                    __instance.FreePreviewModel(buildPreview);
+                                }
+                            }
                     }
                 }
             }
@@ -530,7 +570,7 @@ namespace DSP_Mods.CopyInserters
             {
                 // Do we have cached inserters?
                 var ci = PatchCopyInserters.cachedInserters;
-                if (ci.Count > 0)
+                if (CopyInserters.copyEnabled && ci.Count > 0)
                 {
                     foreach (var buildPreview in __instance.buildPreviews)
                     {
@@ -595,6 +635,7 @@ namespace DSP_Mods.CopyInserters
             public static void PlayerAction_BuildResetCopyInfoPostfix()
             {
                 PatchCopyInserters.cachedInserters.Clear();
+                CopyInserters.copyEnabled = true;
             }
         }
     }
