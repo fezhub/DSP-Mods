@@ -426,15 +426,22 @@ namespace DSP_Mods.CopyInserters
             /// </summary>
             [HarmonyPostfix]
             [HarmonyPatch(typeof(PlayerAction_Build), "SetCopyInfo")]
-            public static void PlayerAction_BuildSetCopyInfoPostfix(PlayerAction_Build __instance, ref PlanetFactory ___factory, int objectId, PlanetAuxData ___planetAux)
+            public static void PlayerAction_BuildSetCopyInfoPostfix(PlayerAction_Build __instance, ref PlanetFactory ___factory, PlanetAuxData ___planetAux, int objectId, int protoId)
             {
+
                 cachedInserters.Clear(); // Remove previous copy info
                 if (objectId < 0) // Copied item is a ghost, no inserters to cache
                     return;
+                var sourceEntityProto = LDB.items.Select(protoId);
 
-                var sourceEntity = objectId;
-                var sourcePos = ___factory.entityPool[objectId].pos;
-                var sourceRot = ___factory.entityPool[objectId].rot;
+                // Ignore building without inserter slots
+                if (sourceEntityProto.prefabDesc.insertPoses.Length == 0)
+                    return;
+
+                var sourceEntityId = objectId;
+                var sourceEntity = ___factory.entityPool[sourceEntityId];
+                var sourcePos = sourceEntity.pos;
+                var sourceRot = sourceEntity.rot;
                 // Find connected inserters
                 var inserterPool = ___factory.factorySystem.inserterPool;
                 var entityPool = ___factory.entityPool;
@@ -449,9 +456,9 @@ namespace DSP_Mods.CopyInserters
                         var pickTarget = inserter.pickTarget;
                         var insertTarget = inserter.insertTarget;
 
-                        if (pickTarget == sourceEntity || insertTarget == sourceEntity)
+                        if (pickTarget == sourceEntityId || insertTarget == sourceEntityId)
                         {
-                            bool incoming = insertTarget == sourceEntity;
+                            bool incoming = insertTarget == sourceEntityId;
                             var otherId = incoming ? pickTarget : insertTarget; // The belt or other building this inserter is attached to
                             var otherPos = entityPool[otherId].pos;
 
@@ -485,11 +492,11 @@ namespace DSP_Mods.CopyInserters
                             // compute the start and end slot that the cached inserter uses
                             if (!incoming)
                             {
-                                CalculatePose(__instance, sourceEntity, otherId);
+                                CalculatePose(__instance, sourceEntityId, otherId);
                             }
                             else
                             {
-                                CalculatePose(__instance, otherId, sourceEntity);
+                                CalculatePose(__instance, otherId, sourceEntityId);
                             }
 
                             if (__instance.posePairs.Count > 0)
