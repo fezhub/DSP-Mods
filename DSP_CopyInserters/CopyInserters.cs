@@ -18,7 +18,7 @@ namespace DSP_Mods.CopyInserters
         void Update()
         {
   
-            if (Input.GetKeyUp(KeyCode.LeftControl))
+            if (Input.GetKeyUp(KeyCode.Tab))
             {
                 copyEnabled = !copyEnabled;
             }
@@ -70,7 +70,7 @@ namespace DSP_Mods.CopyInserters
             if (!tip)
             {
                 allTips = ___allTips;
-                tip = __instance.RegisterTip("L-CTRL", "Toggle inserters copy");
+                tip = __instance.RegisterTip("TAB", "Toggle inserters copy");
             }
             tip.desired = IsCopyAvailable();
         }
