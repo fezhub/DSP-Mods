@@ -18,7 +18,7 @@ namespace DSP_Mods.CopyInserters
         void Update()
         {
   
-            if (Input.GetKeyUp(KeyCode.Tab))
+            if (Input.GetKeyUp(KeyCode.Tab) && IsCopyAvailable())
             {
                 copyEnabled = !copyEnabled;
             }
@@ -583,7 +583,7 @@ namespace DSP_Mods.CopyInserters
                 var ci = PatchCopyInserters.cachedInserters;
                 if (CopyInserters.copyEnabled && ci.Count > 0)
                 {
-                    foreach (var buildPreview in __instance.buildPreviews)
+                    foreach (BuildPreview buildPreview in __instance.buildPreviews)
                     {
                         Vector3 targetPos;
                         Quaternion targetRot;
