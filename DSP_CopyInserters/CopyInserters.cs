@@ -5,12 +5,24 @@ using System.Reflection.Emit;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace DSP_Mods.CopyInserters
 {
     [BepInPlugin("org.fezeral.plugins.copyinserters", "Copy Inserters Plug-In", "1.1.0.0")]
     class CopyInserters : BaseUnityPlugin
     {
+        public static bool copyEnabled = true;
+        public static List<UIKeyTipNode> allTips;
+        public static UIKeyTipNode tip;
+        void Update()
+        {
+  
+            if (Input.GetKeyUp(KeyCode.Tab) && IsCopyAvailable())
+            {
+                copyEnabled = !copyEnabled;
+            }
+        }
         private static PlayerController _pc;
         internal static PlayerController pc
         {
@@ -31,6 +43,7 @@ namespace DSP_Mods.CopyInserters
             try
             {
                 harmony.PatchAll(typeof(PatchCopyInserters));
+                harmony.PatchAll(typeof(CopyInserters));
             }
             catch (Exception e)
             {
@@ -43,6 +56,32 @@ namespace DSP_Mods.CopyInserters
         internal void OnDestroy()
         {
             harmony.UnpatchSelf();  // For ScriptEngine hot-reloading
+            allTips.Remove(tip);
+        }
+
+        public static bool IsCopyAvailable()
+        {
+            return UIGame.viewMode == EViewMode.Build && pc.cmd.mode == 1 && PatchCopyInserters.cachedInserters.Count > 0;
+        }
+
+        [HarmonyPrefix, HarmonyPatch(typeof(UIKeyTips), "UpdateTipDesiredState")]
+        public static void UpdateTipDesiredStatePatch(UIKeyTips __instance, ref List<UIKeyTipNode> ___allTips)
+        {
+            if (!tip)
+            {
+                allTips = ___allTips;
+                tip = __instance.RegisterTip("TAB", "Toggle inserters copy");
+            }
+            tip.desired = IsCopyAvailable();
+        }
+
+        [HarmonyPostfix, HarmonyPriority(Priority.Last), HarmonyPatch(typeof(UIGeneralTips), "_OnUpdate")]
+        public static void TipsPatch(ref Text ___modeText)
+        {
+        if (IsCopyAvailable() && copyEnabled)
+            {
+                ___modeText.text += " - Copy inserters";
+            }
         }
 
         [HarmonyPatch]
@@ -61,8 +100,9 @@ namespace DSP_Mods.CopyInserters
             public static void PlayerAction_BuildDetermineBuildPreviewsPostfix(PlayerAction_Build __instance)
             {
                 // Do we have cached inserters?
+
                 var ci = PatchCopyInserters.cachedInserters;
-                if (ci.Count > 0)
+                if (CopyInserters.copyEnabled && ci.Count > 0)
                 {
                     var bpCount = __instance.buildPreviews.Count;
                     for (int i = 0; i < bpCount; i++)
@@ -90,13 +130,15 @@ namespace DSP_Mods.CopyInserters
 
             }
 
+
+
             [HarmonyPostfix]
             [HarmonyPatch(typeof(PlayerAction_Build), "CheckBuildConditions")]
             public static void PlayerAction_BuildCheckBuildConditionsPostfix(PlayerAction_Build __instance, ref bool __result)
             {
                 var ci = PatchCopyInserters.cachedInserters;
 
-                if (ci.Count > 0)
+                if (CopyInserters.copyEnabled && ci.Count > 0)
                 {
                     __instance.cursorText = __instance.prepareCursorText;
                     __instance.prepareCursorText = string.Empty;
@@ -141,24 +183,22 @@ namespace DSP_Mods.CopyInserters
             public static void PlayerAction_BuildCreatePrebuildsPrefix(PlayerAction_Build __instance)
             {
                 var ci = PatchCopyInserters.cachedInserters;
-
-                if (ci.Count > 0)
+                if (CopyInserters.copyEnabled && ci.Count > 0) 
                 {
-                    // for now we remove the inserters prebuilds
                     if (__instance.waitConfirm && VFInput._buildConfirm.onDown && __instance.buildPreviews.Count > 0)
                     {
+                        // for now we remove the inserters prebuilds
                         for (int i = __instance.buildPreviews.Count - 1; i >= 0; i--) // Reverse loop for removing found elements
-                        {
-                            var buildPreview = __instance.buildPreviews[i];
-                            bool isInserter = buildPreview.desc.isInserter;
-
-                            if (isInserter && buildPreview.ignoreCollider)
                             {
-                                __instance.buildPreviews.RemoveAt(i);
-                                __instance.FreePreviewModel(buildPreview);
-                            }
+                                var buildPreview = __instance.buildPreviews[i];
+                                bool isInserter = buildPreview.desc.isInserter;
 
-                        }
+                                if (isInserter && buildPreview.ignoreCollider)
+                                {
+                                    __instance.buildPreviews.RemoveAt(i);
+                                    __instance.FreePreviewModel(buildPreview);
+                                }
+                            }
                     }
                 }
             }
@@ -301,6 +341,8 @@ namespace DSP_Mods.CopyInserters
                                 pbdata.pickOffset = pi.ci.pickOffset;
                                 pbdata.filterId = pi.ci.filterId;
 
+                                pbdata.refCount = pi.ci.refCount;
+
                                 // Calculate inserter start and end positions from stored deltas and the building's rotation
                                 pbdata.pos = ___planetAux.Snap(entityBuilt.pos + entityBuilt.rot * pi.ci.posDelta, true, false);
                                 pbdata.pos2 = ___planetAux.Snap(entityBuilt.pos + entityBuilt.rot * pi.ci.pos2Delta, true, false);
@@ -384,15 +426,22 @@ namespace DSP_Mods.CopyInserters
             /// </summary>
             [HarmonyPostfix]
             [HarmonyPatch(typeof(PlayerAction_Build), "SetCopyInfo")]
-            public static void PlayerAction_BuildSetCopyInfoPostfix(PlayerAction_Build __instance, ref PlanetFactory ___factory, int objectId, PlanetAuxData ___planetAux)
+            public static void PlayerAction_BuildSetCopyInfoPostfix(PlayerAction_Build __instance, ref PlanetFactory ___factory, PlanetAuxData ___planetAux, int objectId, int protoId)
             {
+
                 cachedInserters.Clear(); // Remove previous copy info
                 if (objectId < 0) // Copied item is a ghost, no inserters to cache
                     return;
+                var sourceEntityProto = LDB.items.Select(protoId);
 
-                var sourceEntity = objectId;
-                var sourcePos = ___factory.entityPool[objectId].pos;
-                var sourceRot = ___factory.entityPool[objectId].rot;
+                // Ignore building without inserter slots
+                if (sourceEntityProto.prefabDesc.insertPoses.Length == 0)
+                    return;
+
+                var sourceEntityId = objectId;
+                var sourceEntity = ___factory.entityPool[sourceEntityId];
+                var sourcePos = sourceEntity.pos;
+                var sourceRot = sourceEntity.rot;
                 // Find connected inserters
                 var inserterPool = ___factory.factorySystem.inserterPool;
                 var entityPool = ___factory.entityPool;
@@ -407,9 +456,9 @@ namespace DSP_Mods.CopyInserters
                         var pickTarget = inserter.pickTarget;
                         var insertTarget = inserter.insertTarget;
 
-                        if (pickTarget == sourceEntity || insertTarget == sourceEntity)
+                        if (pickTarget == sourceEntityId || insertTarget == sourceEntityId)
                         {
-                            bool incoming = insertTarget == sourceEntity;
+                            bool incoming = insertTarget == sourceEntityId;
                             var otherId = incoming ? pickTarget : insertTarget; // The belt or other building this inserter is attached to
                             var otherPos = entityPool[otherId].pos;
 
@@ -438,15 +487,16 @@ namespace DSP_Mods.CopyInserters
                             ci.posDelta = Quaternion.Inverse(sourceRot) * (inserterEntity.pos - sourcePos); // Delta from copied building to inserter pos
                             ci.pos2Delta = Quaternion.Inverse(sourceRot) * (inserter.pos2 - sourcePos); // Delta from copied building to inserter pos2
 
-
+                            ItemProto itemProto = LDB.items.Select(ci.protoId);
+                            ci.refCount = Mathf.RoundToInt((float)(inserter.stt - 0.499f) / itemProto.prefabDesc.inserterSTT);
                             // compute the start and end slot that the cached inserter uses
                             if (!incoming)
                             {
-                                CalculatePose(__instance, sourceEntity, otherId);
+                                CalculatePose(__instance, sourceEntityId, otherId);
                             }
                             else
                             {
-                                CalculatePose(__instance, otherId, sourceEntity);
+                                CalculatePose(__instance, otherId, sourceEntityId);
                             }
 
                             if (__instance.posePairs.Count > 0)
@@ -510,6 +560,7 @@ namespace DSP_Mods.CopyInserters
                 public int filterId;
                 public Vector3[] snapMoves;
                 public int snapCount;
+                public int refCount;
             }
 
             //For inserters that need to be built when assembler is ready
@@ -530,9 +581,9 @@ namespace DSP_Mods.CopyInserters
             {
                 // Do we have cached inserters?
                 var ci = PatchCopyInserters.cachedInserters;
-                if (ci.Count > 0)
+                if (CopyInserters.copyEnabled && ci.Count > 0)
                 {
-                    foreach (var buildPreview in __instance.buildPreviews)
+                    foreach (BuildPreview buildPreview in __instance.buildPreviews)
                     {
                         Vector3 targetPos;
                         Quaternion targetRot;
@@ -595,6 +646,7 @@ namespace DSP_Mods.CopyInserters
             public static void PlayerAction_BuildResetCopyInfoPostfix()
             {
                 PatchCopyInserters.cachedInserters.Clear();
+                CopyInserters.copyEnabled = true;
             }
         }
     }
