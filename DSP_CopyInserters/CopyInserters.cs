@@ -107,7 +107,8 @@ namespace DSP_Mods.CopyInserters
                     var bpCount = __instance.buildPreviews.Count;
                     for (int i = 0; i < bpCount; i++)
                     {
-                        var buildingPreview = __instance.buildPreviews[i];
+                        BuildPreview buildingPreview = __instance.buildPreviews[i];
+
                         if (!buildingPreview.item.prefabDesc.isInserter)
                         {
                             foreach (var inserter in ci)
@@ -442,6 +443,7 @@ namespace DSP_Mods.CopyInserters
                 var sourceEntity = ___factory.entityPool[sourceEntityId];
                 var sourcePos = sourceEntity.pos;
                 var sourceRot = sourceEntity.rot;
+
                 // Find connected inserters
                 var inserterPool = ___factory.factorySystem.inserterPool;
                 var entityPool = ___factory.entityPool;
@@ -597,6 +599,13 @@ namespace DSP_Mods.CopyInserters
                             targetPos = __instance.previewPose.position + __instance.previewPose.rotation * buildPreview.lpos;
                             targetRot = __instance.previewPose.rotation;
                         }
+
+                        // ignore buildings not being built at ground level
+                        if(__instance.multiLevelCovering)
+                        {
+                            continue;
+                        }
+
                         var entityPool = ___factory.entityPool;
                         foreach (var inserter in ci)
                         {
