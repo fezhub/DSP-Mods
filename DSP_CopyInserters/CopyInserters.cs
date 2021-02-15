@@ -96,7 +96,6 @@ namespace DSP_Mods.CopyInserters
             public static void PlayerAction_BuildDetermineBuildPreviewsPostfix(PlayerAction_Build __instance)
             {
                 // Do we have cached inserters?
-
                 var ci = PatchCopyInserters.cachedInserters;
                 if (CopyInserters.copyEnabled && ci.Count > 0)
                 {
@@ -119,12 +118,9 @@ namespace DSP_Mods.CopyInserters
                                 bp.ignoreCollider = true;
                                 __instance.AddBuildPreview(bp);
                             }
-                        }
-                        
-                    }
-                    
+                        }                        
+                    }                    
                 }
-
             }
 
 
