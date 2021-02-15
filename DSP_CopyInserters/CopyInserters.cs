@@ -91,10 +91,6 @@ namespace DSP_Mods.CopyInserters
             internal static List<PendingInserter> pendingInserters; // Info on inserters for every unbuilt pasted building
 
 
-            /// <summary>
-            /// After any item has completed building, check if there are pendingInserters to request
-            /// </summary>
-            /// <param name="postObjId">The built entities object ID</param>
             [HarmonyPostfix]
             [HarmonyPatch(typeof(PlayerAction_Build), "DetermineBuildPreviews")]
             public static void PlayerAction_BuildDetermineBuildPreviewsPostfix(PlayerAction_Build __instance)
