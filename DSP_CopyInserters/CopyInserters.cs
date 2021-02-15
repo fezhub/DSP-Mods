@@ -80,7 +80,7 @@ namespace DSP_Mods.CopyInserters
         {
         if (IsCopyAvailable() && copyEnabled)
             {
-                ___modeText.text += " - Copy inserters";
+                ___modeText.text += " - Copy Inserters";
             }
         }
 
