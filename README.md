@@ -9,6 +9,7 @@ When copying a building, the attached inserters are also copied to the new locat
 
 ### Sphere Progess
 Adds progress information to the Dyson Sphere UI screen
+
 ![Sphere Progress Demo](DSP_SphereProgress/sphereprogress.png)
 
 ### Installation Instructions
