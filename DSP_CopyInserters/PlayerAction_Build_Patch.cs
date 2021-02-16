@@ -61,8 +61,17 @@ namespace DSP_Mods.CopyInserters
                             bp.lpos2 = buildingPreview.lpos + buildingPreview.lrot * cachedInserter.pos2Delta;
                             bp.lrot2 = buildingPreview.lrot * cachedInserter.rot2;
 
-                            Vector3 lpos = __instance.previewPose.position + __instance.previewPose.rotation * bp.lpos;
-                            Vector3 lpos2 = __instance.previewPose.position + __instance.previewPose.rotation * bp.lpos2;
+                            Vector3 lpos = bp.lpos;
+                            Vector3 lpos2 = bp.lpos2;
+
+                            Debug.Log($"{CopyInserters.pc.cmd.stage}");
+
+                            if (bpCount == 1)
+                            {
+                                lpos = __instance.previewPose.position + __instance.previewPose.rotation * bp.lpos;
+                                lpos2 = __instance.previewPose.position + __instance.previewPose.rotation * bp.lpos2;
+                            }
+
                             Vector3 forward = lpos2 - lpos;
 
                             Pose pose;

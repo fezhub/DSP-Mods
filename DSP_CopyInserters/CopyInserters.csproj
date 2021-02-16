@@ -90,7 +90,6 @@
       <HintPath>..\..\..\SteamLibrary\steamapps\common\Dyson Sphere Program\DSPGAME_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.PhysicsModule">
-      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\SteamLibrary\steamapps\common\Dyson Sphere Program\DSPGAME_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.UI">
