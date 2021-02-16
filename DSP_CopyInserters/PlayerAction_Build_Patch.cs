@@ -47,26 +47,27 @@ namespace DSP_Mods.CopyInserters
                 var bpCount = __instance.buildPreviews.Count;
                 for (int i = 0; i < bpCount; i++)
                 {
-                    BuildPreview buildingPreview = __instance.buildPreviews[i];
+                    BuildPreview buildPreview = __instance.buildPreviews[i];
 
-                    if (!buildingPreview.item.prefabDesc.isInserter)
+                    if (!buildPreview.item.prefabDesc.isInserter)
                     {
                         foreach (var cachedInserter in ci)
                         {
                             var bp = BuildPreview.CreateSingle(LDB.items.Select(cachedInserter.protoId), LDB.items.Select(cachedInserter.protoId).prefabDesc, true);
                             bp.ResetInfos();
 
-                            bp.lpos = buildingPreview.lpos + buildingPreview.lrot * cachedInserter.posDelta;
-                            bp.lrot = buildingPreview.lrot * cachedInserter.rot;
-                            bp.lpos2 = buildingPreview.lpos + buildingPreview.lrot * cachedInserter.pos2Delta;
-                            bp.lrot2 = buildingPreview.lrot * cachedInserter.rot2;
+                            bp.lpos = buildPreview.lpos + buildPreview.lrot * cachedInserter.posDelta;
+                            bp.lrot = buildPreview.lrot * cachedInserter.rot;
+                            bp.lpos2 = buildPreview.lpos + buildPreview.lrot * cachedInserter.pos2Delta;
+                            bp.lrot2 = buildPreview.lrot * cachedInserter.rot2;
 
                             Vector3 lpos = bp.lpos;
                             Vector3 lpos2 = bp.lpos2;
 
-                            Debug.Log($"{CopyInserters.pc.cmd.stage}");
-
-                            if (bpCount == 1)
+                            // When using AdvancedBuildDestruct mod, all buildPreviews are positioned 'absolutely' on the planet surface.
+                            // In 'normal' mode the buildPreviews are relative to __instance.previewPose.
+                            // This means that in 'normal' mode the (only) buildPreview is always positioned at {0,0,0}
+                            if (buildPreview.lpos == Vector3.zero)
                             {
                                 lpos = __instance.previewPose.position + __instance.previewPose.rotation * bp.lpos;
                                 lpos2 = __instance.previewPose.position + __instance.previewPose.rotation * bp.lpos2;
@@ -447,15 +448,16 @@ namespace DSP_Mods.CopyInserters
                     {
                         Vector3 targetPos;
                         Quaternion targetRot;
-                        if (__instance.buildPreviews.Count > 1)
-                        {
-                            targetPos = buildPreview.lpos;
-                            targetRot = buildPreview.lrot;
-                        }
-                        else
+
+                        if (buildPreview.lpos == Vector3.zero)
                         {
                             targetPos = __instance.previewPose.position + __instance.previewPose.rotation * buildPreview.lpos;
                             targetRot = __instance.previewPose.rotation;
+                        }
+                        else
+                        {
+                            targetPos = buildPreview.lpos;
+                            targetRot = buildPreview.lrot;
                         }
 
                         // ignore buildings not being built at ground level
