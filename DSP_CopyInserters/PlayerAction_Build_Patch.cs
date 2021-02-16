@@ -151,11 +151,6 @@ namespace DSP_Mods.CopyInserters
                     BuildPreview buildPreview = __instance.buildPreviews[i];
                     bool isInserter = buildPreview.desc.isInserter;
 
-                    if (isInserter)
-                    {
-
-                    }
-
                     if (isInserter && (
                         buildPreview.condition == EBuildCondition.TooFar ||
                         buildPreview.condition == EBuildCondition.TooClose ||
@@ -317,7 +312,6 @@ namespace DSP_Mods.CopyInserters
         [HarmonyPostfix, HarmonyPatch(typeof(PlayerAction_Build), "SetCopyInfo")]
         public static void SetCopyInfo_Postfix(PlayerAction_Build __instance, ref PlanetFactory ___factory, PlanetAuxData ___planetAux, int objectId, int protoId)
         {
-
             cachedInserters.Clear(); // Remove previous copy info
             if (objectId < 0) // Copied item is a ghost, no inserters to cache
                 return;

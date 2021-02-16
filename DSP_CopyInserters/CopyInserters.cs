@@ -31,7 +31,6 @@ namespace DSP_Mods.CopyInserters
 
         void Update()
         {
-
             if (Input.GetKeyUp(KeyCode.Tab) && IsCopyAvailable())
             {
                 copyEnabled = !copyEnabled;
