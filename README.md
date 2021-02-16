@@ -7,7 +7,7 @@ Dyson Sphere Program Mods by thisisbrad
 When copying a building, the attached inserters are also copied to the new location
 ![Copy Inserters Demo](copyinserters.gif)
 
-### Sphere Progess
+### Sphere Progress
 Adds progress information to the Dyson Sphere UI screen
 
 ![Sphere Progress Demo](DSP_SphereProgress/sphereprogress.png)
