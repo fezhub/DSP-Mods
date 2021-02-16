@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.30128.74
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CopyInserters", "DSP_CopyInserters\CopyInserters.csproj", "{AEF45E3E-3676-418D-AF59-D2708E797D8D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SphereProgress", "SphereProgress\SphereProgress.csproj", "{8EC6BEF3-B4BF-4819-8B9F-B8059073FF40}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SphereProgress", "DSP_SphereProgress\SphereProgress.csproj", "{8EC6BEF3-B4BF-4819-8B9F-B8059073FF40}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
