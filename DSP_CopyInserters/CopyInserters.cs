@@ -7,7 +7,7 @@ using UnityEngine.UI;
 
 namespace DSP_Mods.CopyInserters
 {
-    [BepInPlugin("org.fezeral.plugins.copyinserters", "Copy Inserters Plug-In", "1.2.0.0")]
+    [BepInPlugin("org.fezeral.plugins.copyinserters", "Copy Inserters Plug-In", "1.4.0.0")]
     class CopyInserters : BaseUnityPlugin
     {
         Harmony harmony;
