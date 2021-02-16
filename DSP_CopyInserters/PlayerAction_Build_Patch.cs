@@ -504,6 +504,16 @@ namespace DSP_Mods.CopyInserters
 
                         if (otherId != 0)
                         {
+                            if(otherId < 0)
+                            {
+                                ItemProto otherProto = LDB.items.Select((int)___factory.prebuildPool[-otherId].protoId);
+                                if (otherProto.prefabDesc.isBelt)
+                                {
+                                    // we cannot safely attach to belts not yet fully built.
+                                    continue;
+                                }
+                            }
+
                             // Create inserter Prebuild data
                             var pbdata = new PrebuildData
                             {
