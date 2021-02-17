@@ -326,6 +326,13 @@ namespace DSP_Mods.CopyInserters
             var sourcePos = sourceEntity.pos;
             var sourceRot = sourceEntity.rot;
 
+            if(sourceEntityProto.prefabDesc.assemblerRecipeType == ERecipeType.Smelt)
+            {
+                // Smelter rotation is not stored correctly. to ensure the inserters in the preview match the copied inserter
+                // we ignore the sourceRot and use the initial rotation of the previewed assembler
+                sourceRot = Maths.SphericalRotation(sourcePos, 0);
+            }
+
             // Find connected inserters
             var inserterPool = ___factory.factorySystem.inserterPool;
             var entityPool = ___factory.entityPool;
