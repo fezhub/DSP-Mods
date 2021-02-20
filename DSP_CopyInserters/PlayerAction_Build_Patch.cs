@@ -49,7 +49,7 @@ namespace DSP_Mods.CopyInserters
                 {
                     BuildPreview buildPreview = __instance.buildPreviews[i];
 
-                    if (!buildPreview.item.prefabDesc.isInserter)
+                    if (!buildPreview.item.prefabDesc.isInserter && !__instance.multiLevelCovering)
                     {
                         foreach (var cachedInserter in ci)
                         {
@@ -316,15 +316,22 @@ namespace DSP_Mods.CopyInserters
             if (objectId < 0) // Copied item is a ghost, no inserters to cache
                 return;
             var sourceEntityProto = LDB.items.Select(protoId);
-
-            // Ignore building without inserter slots
-            if (sourceEntityProto.prefabDesc.insertPoses.Length == 0)
-                return;
-
             var sourceEntityId = objectId;
             var sourceEntity = ___factory.entityPool[sourceEntityId];
             var sourcePos = sourceEntity.pos;
             var sourceRot = sourceEntity.rot;
+
+            // Set the current build rotation to the copied building rotation
+            Quaternion zeroRot = Maths.SphericalRotation(sourcePos, 0f);
+            float yaw = Vector3.SignedAngle(zeroRot.Forward(), sourceRot.Forward(), zeroRot.Up());
+            if (sourceEntityProto.prefabDesc.minerType != EMinerType.Vein) {
+                yaw = Mathf.Round(yaw / 90f) * 90f;
+            }
+            __instance.yaw = yaw;
+
+            // Ignore building without inserter slots
+            if (sourceEntityProto.prefabDesc.insertPoses.Length == 0)
+                return;
 
             // Find connected inserters
             var inserterPool = ___factory.factorySystem.inserterPool;
