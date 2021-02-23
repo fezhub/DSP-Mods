@@ -56,7 +56,11 @@ namespace DSP_Mods.CopyInserters
         internal void OnDestroy()
         {
             harmony.UnpatchSelf();  // For ScriptEngine hot-reloading
-            allTips.Remove(tip);
+            if(allTips!=null && tip != null)
+            {
+                allTips.Remove(tip);
+            }
+
         }
 
         public static bool IsCopyAvailable()
