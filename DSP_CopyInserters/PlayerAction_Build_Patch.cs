@@ -334,7 +334,7 @@ namespace DSP_Mods.CopyInserters
             return true;
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(PlayerAction_Build), "DetermineBuildPreviews")]
+        [HarmonyPostfix, HarmonyPriority(Priority.Last), HarmonyPatch(typeof(PlayerAction_Build), "DetermineBuildPreviews")]
         public static void DetermineBuildPreviews_Postfix(PlayerAction_Build __instance, PlanetFactory ___factory, PlanetAuxData ___planetAux, NearColliderLogic ___nearcdLogic, Player ___player)
         {
             // Do we have cached inserters?
@@ -373,14 +373,7 @@ namespace DSP_Mods.CopyInserters
                                 bp.lpos2 = positionData.absoluteInserterPos2;
                             }
 
-                            if (cachedInserter.incoming)
-                            {
-                                bp.inputObjId = positionData.otherId;
-                            }
-                            else
-                            {
-                                bp.outputObjId = positionData.otherId;
-                            }
+
 
                             if (positionData.condition == null)
                             {
@@ -444,6 +437,18 @@ namespace DSP_Mods.CopyInserters
 
                             bp.condition = (EBuildCondition)positionData.condition;
 
+                            if(bp.condition == EBuildCondition.Ok)
+                            {
+                                if (cachedInserter.incoming)
+                                {
+                                    bp.inputObjId = positionData.otherId;
+                                }
+                                else
+                                {
+                                    bp.outputObjId = positionData.otherId;
+                                }
+                            }
+
                             __instance.AddBuildPreview(bp);
                         }
                     }
@@ -469,11 +474,14 @@ namespace DSP_Mods.CopyInserters
                 {
                     BuildPreview buildPreview = __instance.buildPreviews[i];
                     bool isInserter = buildPreview.desc.isInserter;
-
+                    bool isConnected = buildPreview.inputObjId != 0 || buildPreview.outputObjId != 0;
                     if (isInserter && (
                         buildPreview.condition == EBuildCondition.TooFar ||
                         buildPreview.condition == EBuildCondition.TooClose ||
-                        buildPreview.condition == EBuildCondition.OutOfReach))
+                        buildPreview.condition == EBuildCondition.OutOfReach ||
+                        // the following fix an incompatibility with AdvanceBuildDestruct where inserter are tagged ascolliding even if they are not
+                        (buildPreview.condition == EBuildCondition.Collide && isConnected)
+                        ))
                     {
                         buildPreview.condition = EBuildCondition.Ok;
                     }
@@ -527,7 +535,7 @@ namespace DSP_Mods.CopyInserters
             }
         }
 
-        [HarmonyPrefix, HarmonyPatch(typeof(PlayerAction_Build), "CreatePrebuilds")]
+        [HarmonyPrefix, HarmonyPriority(Priority.First), HarmonyPatch(typeof(PlayerAction_Build), "CreatePrebuilds")]
         public static void CreatePrebuilds_Prefix(PlayerAction_Build __instance)
         {
             var ci = cachedInserters;
