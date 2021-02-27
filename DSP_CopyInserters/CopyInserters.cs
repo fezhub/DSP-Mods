@@ -89,5 +89,21 @@ namespace DSP_Mods.CopyInserters
                 ___modeText.text += " - Copy Inserters";
             }
         }
+
+        public static int lastCmdMode;
+        [HarmonyPrefix, HarmonyPatch(typeof(PlayerController), "UpdateCommandState")]
+        public static void UpdateCommandState_Prefix(PlayerController __instance)
+        {
+            // Fixes https://github.com/fezhub/DSP-Mods/issues/24
+            // When player cancels a build action with cached inserters, (mode 1->0)
+            // Clear the inserters, so that selecting the same building from the toolbar
+            // without exiting build mode does not include the inserters again
+            if (PlayerAction_Build_Patch.cachedInserters.Count > 0
+                && lastCmdMode == 1 && __instance.cmd.type == ECommand.Build && __instance.cmd.mode == 0)
+                PlayerAction_Build_Patch.cachedInserters.Clear();
+
+            if (__instance.cmd.mode != lastCmdMode) // store the last mode, as type->Build before mode->1
+                lastCmdMode = __instance.cmd.mode;
+        }
     }
 }
