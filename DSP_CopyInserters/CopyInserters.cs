@@ -52,6 +52,8 @@ namespace DSP_Mods.CopyInserters
             }
 
             PlayerAction_Build_Patch.cachedInserters = new List<PlayerAction_Build_Patch.CachedInserter>();
+            PlayerAction_Build_Patch.currentPositionCache = new Queue<PlayerAction_Build_Patch.InserterPosition>();
+            PlayerAction_Build_Patch.nextPositionCache = new Queue<PlayerAction_Build_Patch.InserterPosition>();
         }
         internal void OnDestroy()
         {

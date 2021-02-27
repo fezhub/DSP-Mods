@@ -33,6 +33,7 @@ namespace DSP_Mods.CopyInserters
 
         internal class InserterPosition
         {
+            public CachedInserter cachedInserter;
             public Vector3 absoluteBuildingPos;
             public Quaternion absoluteBuildingRot;
 
@@ -51,6 +52,8 @@ namespace DSP_Mods.CopyInserters
             public short insertOffset;
 
             public int otherId;
+
+            public EBuildCondition? condition;
         }
 
         internal static List<CachedInserter> cachedInserters; // During copy mode, cached info on inserters attached to the copied building
@@ -62,8 +65,18 @@ namespace DSP_Mods.CopyInserters
         private static ItemProto overriddenProto;
         private static Pose overriddenPose;
 
+        public static Queue<InserterPosition> currentPositionCache;
+        public static Queue<InserterPosition> nextPositionCache;
+
+        private static void SwapPositionCache()
+        {
+            currentPositionCache = nextPositionCache;
+            nextPositionCache = new Queue<InserterPosition>();
+        }
+
         private static InserterPosition GetPositions(PlayerAction_Build __instance, PlanetFactory ___factory, PlanetAuxData ___planetAux, NearColliderLogic ___nearcdLogic, BuildPreview buildPreview, CachedInserter cachedInserter)
         {
+
             Vector3 absoluteBuildingPos;
             Quaternion absoluteBuildingRot;
 
@@ -81,6 +94,24 @@ namespace DSP_Mods.CopyInserters
                 absoluteBuildingPos = buildPreview.lpos;
                 absoluteBuildingRot = buildPreview.lrot;
             }
+
+            InserterPosition position = null;
+            if (currentPositionCache.Count > 0)
+            {
+                position = currentPositionCache.Dequeue();
+            }
+
+            bool isCacheValid = position != null &&
+                position.cachedInserter == cachedInserter &&
+                position.absoluteBuildingPos == absoluteBuildingPos &&
+                position.absoluteBuildingRot == absoluteBuildingRot;
+
+            if (isCacheValid)
+            {
+                nextPositionCache.Enqueue(position);
+                return position;
+            }
+
 
             var posDelta = cachedInserter.posDelta;
             var pos2Delta = cachedInserter.pos2Delta;
@@ -153,7 +184,7 @@ namespace DSP_Mods.CopyInserters
             {
                 var buildingId = buildPreview.objId;
 
-                if(buildingId == 0)
+                if (buildingId == 0)
                 {
                     // the original calculatePose code doesn't correctly handle calculation where one of the entity is a BuildPreview
                     // as it has objId 0 and is not registered in either the entityPool or prebuildPool
@@ -227,9 +258,10 @@ namespace DSP_Mods.CopyInserters
                 }
             }
 
-            return new InserterPosition()
+            position = new InserterPosition()
             {
-                absoluteBuildingPos = absoluteInserterPos,
+                cachedInserter = cachedInserter,
+                absoluteBuildingPos = absoluteBuildingPos,
                 absoluteBuildingRot = absoluteBuildingRot,
 
                 otherId = otherId,
@@ -246,14 +278,18 @@ namespace DSP_Mods.CopyInserters
                 insertOffset = insertOffset,
 
                 startSlot = startSlot,
-                endSlot = endSlot
+                endSlot = endSlot,
             };
+
+
+            nextPositionCache.Enqueue(position);
+            return position;
         }
 
         [HarmonyPrefix, HarmonyPatch(typeof(PlayerAction_Build), "GetObjectPose")]
         public static bool GetObjectPose_Prefix(int objId, ref Pose __result)
         {
-            if(overridePoseMethods && objId == 0)
+            if (overridePoseMethods && objId == 0)
             {
                 __result = overriddenPose;
                 return false;
@@ -298,19 +334,20 @@ namespace DSP_Mods.CopyInserters
             return true;
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(PlayerAction_Build), "DetermineBuildPreviews")]
+        [HarmonyPostfix, HarmonyPriority(Priority.Last), HarmonyPatch(typeof(PlayerAction_Build), "DetermineBuildPreviews")]
         public static void DetermineBuildPreviews_Postfix(PlayerAction_Build __instance, PlanetFactory ___factory, PlanetAuxData ___planetAux, NearColliderLogic ___nearcdLogic, Player ___player)
         {
             // Do we have cached inserters?
             var ci = cachedInserters;
-            if (CopyInserters.copyEnabled && ci.Count > 0)
+            if (CopyInserters.copyEnabled && ci.Count > 0 && !__instance.multiLevelCovering)
             {
                 var bpCount = __instance.buildPreviews.Count;
+
                 for (int i = 0; i < bpCount; i++)
                 {
                     BuildPreview buildPreview = __instance.buildPreviews[i];
 
-                    if (!buildPreview.item.prefabDesc.isInserter && !__instance.multiLevelCovering)
+                    if (!buildPreview.item.prefabDesc.isInserter)
                     {
                         foreach (var cachedInserter in ci)
                         {
@@ -336,66 +373,79 @@ namespace DSP_Mods.CopyInserters
                                 bp.lpos2 = positionData.absoluteInserterPos2;
                             }
 
-                            if (cachedInserter.incoming)
+
+
+                            if (positionData.condition == null)
                             {
-                                bp.inputObjId = positionData.otherId;
-                            } else
-                            {
-                                bp.outputObjId = positionData.otherId;
+                                positionData.condition = EBuildCondition.Ok;
+
+                                Vector3 lpos = positionData.absoluteInserterPos;
+                                Vector3 lpos2 = positionData.absoluteInserterPos2;
+                                Vector3 forward = lpos2 - lpos;
+
+                                Pose pose;
+                                pose.position = Vector3.Lerp(lpos, lpos2, 0.5f);
+                                pose.rotation = Quaternion.LookRotation(forward, lpos.normalized);
+
+
+                                var colliderData = bp.desc.buildColliders[0];
+                                colliderData.ext = new Vector3(colliderData.ext.x, colliderData.ext.y, Vector3.Distance(lpos2, lpos) * 0.5f + colliderData.ext.z - 0.5f);
+
+                                if (cachedInserter.otherIsBelt)
+                                {
+                                    if (cachedInserter.incoming)
+                                    {
+                                        colliderData.pos.z -= 0.4f;
+                                        colliderData.ext.z += 0.4f;
+                                    }
+                                    else
+                                    {
+                                        colliderData.pos.z += 0.4f;
+                                        colliderData.ext.z += 0.4f;
+                                    }
+                                }
+
+                                if (colliderData.ext.z < 0.1f)
+                                {
+                                    colliderData.ext.z = 0.1f;
+                                }
+                                colliderData.pos = pose.position + pose.rotation * colliderData.pos;
+                                colliderData.q = pose.rotation * colliderData.q;
+
+
+                                int mask = 165888;
+                                int collisionsFound = Physics.OverlapBoxNonAlloc(colliderData.pos, colliderData.ext, _tmp_cols, colliderData.q, mask, QueryTriggerInteraction.Collide);
+
+                                int collisionLimit = cachedInserter.otherIsBelt ? 0 : 1;
+
+                                if (collisionsFound > collisionLimit)
+                                {
+                                    PlanetPhysics physics2 = ___player.planetData.physics;
+                                    for (int j = 0; j < collisionsFound; j++)
+                                    {
+                                        physics2.GetColliderData(_tmp_cols[j], out ColliderData colliderData2);
+                                        if (colliderData2.objId != 0)
+                                        {
+                                            if (colliderData2.usage == EColliderUsage.Build)
+                                            {
+                                                positionData.condition = EBuildCondition.Collide;
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
-                            Vector3 lpos = positionData.absoluteInserterPos;
-                            Vector3 lpos2 = positionData.absoluteInserterPos2;
-                            Vector3 forward = lpos2 - lpos;
+                            bp.condition = (EBuildCondition)positionData.condition;
 
-                            Pose pose;
-                            pose.position = Vector3.Lerp(lpos, lpos2, 0.5f);
-                            pose.rotation = Quaternion.LookRotation(forward, lpos.normalized);
-
-
-                            var colliderData = bp.desc.buildColliders[0];
-                            colliderData.ext = new Vector3(colliderData.ext.x, colliderData.ext.y, Vector3.Distance(lpos2, lpos) * 0.5f + colliderData.ext.z - 0.5f);
-
-                            if (cachedInserter.otherIsBelt)
+                            if(bp.condition == EBuildCondition.Ok)
                             {
                                 if (cachedInserter.incoming)
                                 {
-                                    colliderData.pos.z -= 0.4f;
-                                    colliderData.ext.z += 0.4f;
+                                    bp.inputObjId = positionData.otherId;
                                 }
                                 else
                                 {
-                                    colliderData.pos.z += 0.4f;
-                                    colliderData.ext.z += 0.4f;
-                                }
-                            }
-
-                            if (colliderData.ext.z < 0.1f)
-                            {
-                                colliderData.ext.z = 0.1f;
-                            }
-                            colliderData.pos = pose.position + pose.rotation * colliderData.pos;
-                            colliderData.q = pose.rotation * colliderData.q;
-
-
-                            int mask = 165888;
-                            int found = Physics.OverlapBoxNonAlloc(colliderData.pos, colliderData.ext, _tmp_cols, colliderData.q, mask, QueryTriggerInteraction.Collide);
-
-                            int collisionLimit = cachedInserter.otherIsBelt ? 0 : 1;
-
-                            if (found > collisionLimit)
-                            {
-                                PlanetPhysics physics2 = ___player.planetData.physics;
-                                for (int j = 0; j < found; j++)
-                                {
-                                    physics2.GetColliderData(_tmp_cols[j], out ColliderData colliderData2);
-                                    if (colliderData2.objId != 0)
-                                    {
-                                        if (colliderData2.usage == EColliderUsage.Build)
-                                        {
-                                            bp.condition = EBuildCondition.Collide;
-                                        }
-                                    }
+                                    bp.outputObjId = positionData.otherId;
                                 }
                             }
 
@@ -403,6 +453,8 @@ namespace DSP_Mods.CopyInserters
                         }
                     }
                 }
+
+                SwapPositionCache();
             }
         }
 
@@ -422,11 +474,14 @@ namespace DSP_Mods.CopyInserters
                 {
                     BuildPreview buildPreview = __instance.buildPreviews[i];
                     bool isInserter = buildPreview.desc.isInserter;
-
+                    bool isConnected = buildPreview.inputObjId != 0 || buildPreview.outputObjId != 0;
                     if (isInserter && (
                         buildPreview.condition == EBuildCondition.TooFar ||
                         buildPreview.condition == EBuildCondition.TooClose ||
-                        buildPreview.condition == EBuildCondition.OutOfReach))
+                        buildPreview.condition == EBuildCondition.OutOfReach ||
+                        // the following fix an incompatibility with AdvanceBuildDestruct where inserter are tagged ascolliding even if they are not
+                        (buildPreview.condition == EBuildCondition.Collide && isConnected)
+                        ))
                     {
                         buildPreview.condition = EBuildCondition.Ok;
                     }
@@ -464,23 +519,23 @@ namespace DSP_Mods.CopyInserters
                     if (buildPreview.item.prefabDesc.isInserter &&
                         buildPreview.condition == EBuildCondition.Ok &&
                         buildPreview.outputObjId == 0 && buildPreview.inputObjId == 0)
-                        {
-                            var originalMaterial = ___previewRenderers[buildPreview.previewIndex].sharedMaterial;
+                    {
+                        var originalMaterial = ___previewRenderers[buildPreview.previewIndex].sharedMaterial;
 
-                            // this makes the inserter preview white-ish if not connected
-                            var newMaterial = UnityEngine.Object.Instantiate<Material>(Configs.builtin.previewGizmoMat_Inserter);
-                            newMaterial.SetVector("_Position1", originalMaterial.GetVector("_Position1"));
-                            newMaterial.SetVector("_Position2", originalMaterial.GetVector("_Position2"));
-                            newMaterial.SetVector("_Rotation1", originalMaterial.GetVector("_Rotation1"));
-                            newMaterial.SetVector("_Rotation2", originalMaterial.GetVector("_Rotation2"));
-                            ___previewRenderers[buildPreview.previewIndex].sharedMaterial = newMaterial;
-                        }
+                        // this makes the inserter preview white-ish if not connected
+                        var newMaterial = UnityEngine.Object.Instantiate<Material>(Configs.builtin.previewGizmoMat_Inserter);
+                        newMaterial.SetVector("_Position1", originalMaterial.GetVector("_Position1"));
+                        newMaterial.SetVector("_Position2", originalMaterial.GetVector("_Position2"));
+                        newMaterial.SetVector("_Rotation1", originalMaterial.GetVector("_Rotation1"));
+                        newMaterial.SetVector("_Rotation2", originalMaterial.GetVector("_Rotation2"));
+                        ___previewRenderers[buildPreview.previewIndex].sharedMaterial = newMaterial;
+                    }
 
                 }
             }
         }
 
-        [HarmonyPrefix, HarmonyPatch(typeof(PlayerAction_Build), "CreatePrebuilds")]
+        [HarmonyPrefix, HarmonyPriority(Priority.First), HarmonyPatch(typeof(PlayerAction_Build), "CreatePrebuilds")]
         public static void CreatePrebuilds_Prefix(PlayerAction_Build __instance)
         {
             var ci = cachedInserters;
@@ -656,10 +711,12 @@ namespace DSP_Mods.CopyInserters
                         Vector3 otherPos;
                         ItemProto otherProto;
 
-                        if (otherId > 0) {
+                        if (otherId > 0)
+                        {
                             otherPos = entityPool[otherId].pos;
                             otherProto = LDB.items.Select((int)___factory.entityPool[otherId].protoId);
-                        } else
+                        }
+                        else
                         {
                             otherPos = ___factory.prebuildPool[-otherId].pos;
                             otherProto = LDB.items.Select((int)___factory.prebuildPool[-otherId].protoId);
@@ -747,7 +804,7 @@ namespace DSP_Mods.CopyInserters
         /// After player designates a PreBuild, check if it is an assembler that has Cached Inserters
         /// </summary>
         [HarmonyPostfix, HarmonyPatch(typeof(PlayerAction_Build), "AfterPrebuild")]
-        public static void AfterPrebuild_Postfix(PlayerAction_Build __instance,  PlanetFactory ___factory, PlanetAuxData ___planetAux, NearColliderLogic ___nearcdLogic)
+        public static void AfterPrebuild_Postfix(PlayerAction_Build __instance, PlanetFactory ___factory, PlanetAuxData ___planetAux, NearColliderLogic ___nearcdLogic)
         {
             // Do we have cached inserters?
             var ci = cachedInserters;
@@ -761,7 +818,7 @@ namespace DSP_Mods.CopyInserters
                     foreach (BuildPreview buildPreview in __instance.buildPreviews)
                     {
 
-                        var positionData = GetPositions( __instance,  ___factory,  ___planetAux, ___nearcdLogic, buildPreview, cachedInserter);
+                        var positionData = GetPositions(__instance, ___factory, ___planetAux, ___nearcdLogic, buildPreview, cachedInserter);
 
                         if (positionData.otherId != 0)
                         {
