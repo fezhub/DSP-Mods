@@ -74,7 +74,7 @@ namespace DSP_Mods.CopyInserters
             nextPositionCache = new Queue<InserterPosition>();
         }
 
-        private static InserterPosition GetPositions(PlayerAction_Build __instance, PlanetFactory ___factory, PlanetAuxData ___planetAux, NearColliderLogic ___nearcdLogic, BuildPreview buildPreview, CachedInserter cachedInserter)
+        private static InserterPosition GetPositions(PlayerAction_Build __instance, PlanetFactory ___factory, PlanetAuxData ___planetAux, NearColliderLogic ___nearcdLogic, BuildPreview buildPreview, CachedInserter cachedInserter, bool useCache = true)
         {
 
             Vector3 absoluteBuildingPos;
@@ -96,7 +96,7 @@ namespace DSP_Mods.CopyInserters
             }
 
             InserterPosition position = null;
-            if (currentPositionCache.Count > 0)
+            if (useCache && currentPositionCache.Count > 0)
             {
                 position = currentPositionCache.Dequeue();
             }
@@ -140,7 +140,7 @@ namespace DSP_Mods.CopyInserters
             int otherId = 0;
 
             // find building nearby
-            int found = ___nearcdLogic.GetBuildingsInAreaNonAlloc(testPos, 0.2f, _nearObjectIds);
+            int found = ___nearcdLogic.GetBuildingsInAreaNonAlloc(testPos, 0.2f, _nearObjectIds, false);
 
             // find nearest building
             float maxDistance = 0.2f;
@@ -281,8 +281,10 @@ namespace DSP_Mods.CopyInserters
                 endSlot = endSlot,
             };
 
-
-            nextPositionCache.Enqueue(position);
+            if (useCache)
+            {
+                nextPositionCache.Enqueue(position);
+            }
             return position;
         }
 
@@ -818,7 +820,7 @@ namespace DSP_Mods.CopyInserters
                     foreach (BuildPreview buildPreview in __instance.buildPreviews)
                     {
 
-                        var positionData = GetPositions(__instance, ___factory, ___planetAux, ___nearcdLogic, buildPreview, cachedInserter);
+                        var positionData = GetPositions(__instance, ___factory, ___planetAux, ___nearcdLogic, buildPreview, cachedInserter, false);
 
                         if (positionData.otherId != 0)
                         {
