@@ -2,10 +2,97 @@
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
+using System.IO;
+using System;
+using System.Collections.Generic;
 
 namespace DSP_Mods.SphereProgress
 {
-    [BepInPlugin("org.fezeral.plugins.sphereprogress", "Sphere Progress Plug-In", "1.1.0.0")]
+    public static class DysonSphereUtils
+    {
+        public static void Clear<T>(T[] arr)
+        {
+            Array.Clear(arr, 0, arr.Length);
+        }
+        public static void ResetSphereProgress(this DysonSphere dysonSphere)
+        {
+
+            // reset cell point progress
+            for (int index1 = 1; index1 < dysonSphere.layersIdBased.Length; ++index1)
+            {
+                if (dysonSphere.layersIdBased[index1] != null && dysonSphere.layersIdBased[index1].id == index1)
+                {
+                    DysonShell[] shellPool = dysonSphere.layersIdBased[index1].shellPool;
+                    for (int index2 = 1; index2 < dysonSphere.layersIdBased[index1].shellCursor; ++index2)
+                    {
+                        if (shellPool[index2] != null && shellPool[index2].id == index2)
+                        {
+                            DysonShell shell = shellPool[index2];
+                            shell.cellPoint = 0;
+                            Clear(shell.nodecps);
+                            Clear(shell.vertcps);
+                            shell.vertRecycleCursor = 0;
+                            shell.buffer.SetData(shell.vertcps);
+                        }
+                    }
+                }
+            }
+            // reset structure point progress
+            for (int index1 = 1; index1 < dysonSphere.layersIdBased.Length; ++index1)
+            {
+                DysonSphereLayer dysonSphereLayer = dysonSphere.layersIdBased[index1];
+                if (dysonSphereLayer != null && dysonSphereLayer.id == index1)
+                {
+                    for (int index2 = 1; index2 < dysonSphereLayer.frameCursor; ++index2)
+                    {
+                        DysonFrame dysonFrame = dysonSphereLayer.framePool[index2];
+                        if (dysonFrame != null && dysonFrame.id == index2)
+                        {
+                            dysonFrame.spA = 0;
+                            dysonFrame.spB = 0;
+                        }
+                        dysonFrame.GetSegments().Clear();
+                    }
+                    for (int index2 = 1; index2 < dysonSphereLayer.nodeCursor; ++index2)
+                    {
+                        DysonNode dysonNode = dysonSphereLayer.nodePool[index2];
+                        if (dysonNode != null && dysonNode.id == index2)
+                        {
+                            dysonNode.sp = 0;
+                            dysonNode.cpOrdered = 0;
+                            dysonNode.spOrdered = 0;
+                        }
+                    }
+                }
+            }
+            //sync cell buffer
+            for (int index1 = 1; index1 < dysonSphere.layersIdBased.Length; ++index1)
+            {
+                if (dysonSphere.layersIdBased[index1] != null && dysonSphere.layersIdBased[index1].id == index1)
+                {
+                    DysonShell[] shellPool = dysonSphere.layersIdBased[index1].shellPool;
+                    for (int index2 = 1; index2 < dysonSphere.layersIdBased[index1].shellCursor; ++index2)
+                    {
+                        if (shellPool[index2] != null && shellPool[index2].id == index2)
+                        {
+                            DysonShell shell = shellPool[index2];
+                            shell.SyncCellBuffer();
+                        }
+                    }
+                }
+            }
+            /*
+            dysonSphere.CheckAutoNodes();
+            dysonSphere.ArrangeAutoNodes();
+            for(int i = 0; i < dysonSphere.autoNodes.Length; i++)
+            {
+                dysonSphere.PickAutoNode();
+            }
+            */
+        }
+    }
+
+    [BepInPlugin("org.fezeral.plugins.sphereprogress", "Sphere Progress Plug-In", "1.0.0.1")]
     class SphereProgress : BaseUnityPlugin
     {
         Harmony harmony;
@@ -25,13 +112,137 @@ namespace DSP_Mods.SphereProgress
 
         class PatchSphereProgress
         {
+            public static string Export(DysonSphere dysonSphere)
+            {
+                System.Console.WriteLine("Auto node count: " + dysonSphere.autoNodeCount);
+                foreach (var autoNode in dysonSphere.autoNodes)
+                {
+                    System.Console.WriteLine(autoNode);
+                }
+                var memoryStream = new MemoryStream();
+                dysonSphere.Export(new System.IO.BinaryWriter(memoryStream));
+                return System.Convert.ToBase64String(memoryStream.ToArray());
+            }
+
+            public static void Import(DysonSphere dysonSphere, string dysonSphereData)
+            {
+                byte[] data = System.Convert.FromBase64String(dysonSphereData);
+                var memoryStream = new MemoryStream(data);
+                dysonSphere.Import(new BinaryReader(memoryStream));
+            }
+
+            public static void ImportStructure(DysonSphere dysonSphere, string dysonSphereData)
+            {
+                DysonSphere loadedSphere = new DysonSphere();
+                loadedSphere.Init(dysonSphere.gameData, dysonSphere.starData);
+                byte[] data = System.Convert.FromBase64String(dysonSphereData);
+                var memoryStream = new MemoryStream(data);
+                loadedSphere.Import(new BinaryReader(memoryStream));
+                for (int i = 1; i < dysonSphere.layerCount; i++)
+                {
+                    // dysonSphere.RemoveLayer(i);
+                }
+                int nodeCount = 0;
+                for (int index1 = 1; index1 < loadedSphere.layersIdBased.Length; ++index1)
+                {
+                    if (loadedSphere.layersIdBased[index1] != null && loadedSphere.layersIdBased[index1].id == index1)
+                    {
+                        var layer = loadedSphere.layersIdBased[index1];
+                        int[] nodeIdMap = new int[layer.nodeCapacity];
+                        var newLayer = dysonSphere.AddLayer(layer.orbitRadius, layer.orbitRotation, layer.orbitAngularSpeed);
+                        newLayer.gridMode = layer.gridMode;
+                        for (int index2 = 1; index2 < layer.nodeCursor; ++index2)
+                        {
+                            DysonNode dysonNode = layer.nodePool[index2];
+                            if (dysonNode == null || dysonNode.id != index2)
+                            {
+                                continue;
+                            }
+                            nodeIdMap[dysonNode.id] = newLayer.NewDysonNode(dysonNode.protoId, dysonNode.pos);
+                            GameMain.gameScenario.NotifyOnPlanDysonNode();
+                            nodeCount++;
+                            if (nodeIdMap[dysonNode.id] <= 0)
+                            {
+                                System.Console.WriteLine("Failed to Generate node " + index2 + " pos: " + dysonNode.pos);
+                            }
+                        }
+                        System.Console.WriteLine("Created " + nodeCount + " nodes");
+                        for (int index2 = 1; index2 < layer.frameCursor; ++index2)
+                        {
+                            DysonFrame dysonFrame = layer.framePool[index2];
+                            if (dysonFrame != null && dysonFrame.id == index2)
+                            {
+                                int node1 = nodeIdMap[dysonFrame.nodeA.id];
+                                int node2 = nodeIdMap[dysonFrame.nodeB.id];
+                                if (node1 <= 0 || node2 <= 0)
+                                {
+                                    System.Console.WriteLine("Missing node for frame " + index2 + " old node: " + dysonFrame.nodeA.id + ", " + dysonFrame.nodeB.id);
+                                }
+                                if (newLayer.NewDysonFrame(dysonFrame.protoId, node1, node2, dysonFrame.euler) != dysonFrame.id)
+                                {
+                                    System.Console.WriteLine("Frame id mismatch!");
+                                }
+                                GameMain.gameScenario.NotifyOnPlanDysonFrame();
+                            }
+                        }
+                        
+                        /*
+                        DysonShell[] shellPool = layer.shellPool;
+                        for (int index2 = 1; index2 < layer.shellCursor; ++index2)
+                        {
+                            if (shellPool[index2] != null && shellPool[index2].id == index2)
+                            {
+                                var shell = shellPool[index2];
+                                List<int> nodeIdList = new List<int>();
+                                shell.nodes.ForEach(node =>
+                                {
+                                    if(node!= null && node.id > 0)
+                                    {
+                                        int id = nodeIdMap[node.id];
+                                        if (id <= 0)
+                                        {
+                                            System.Console.WriteLine("Missing node id " + node.id);
+                                        }
+                                        nodeIdList.Add(id);
+                                    }
+                                });
+                                if(newLayer.NewDysonShell(shell.id, nodeIdList)!= shell.id)
+                                {
+                                    System.Console.WriteLine("Shell id mismatch!");
+                                }
+                            }
+                        }
+                        */
+                        
+                    }
+                }
+            }
             internal static GameObject cellValue, cellLabel, structValue, structLabel;
             [HarmonyPostfix, HarmonyPatch(typeof(UIDysonPanel), "_OnUpdate")]
             public static void UIDysonPanel_OnUpdate_Postfix(UIDysonPanel __instance)
             {
+                if (Input.GetKeyDown(KeyCode.L))
+                {
+                    Import(__instance.viewDysonSphere, GUIUtility.systemCopyBuffer);
+                    __instance.viewDysonSphere.ResetSphereProgress();
+                    string data = Export(__instance.viewDysonSphere);
+                    Import(__instance.viewDysonSphere, data);
+                    UIRealtimeTip.Popup("Imported dyson sphere data from clipboard!");
+                    System.Console.WriteLine("Imported dyson sphere data from clipboard!");
+                }
+                var dysonSphere = __instance.viewDysonSphere;
+                if (Input.GetKeyDown(KeyCode.S))
+                {
+                    GUIUtility.systemCopyBuffer = Export(dysonSphere);
+                    UIRealtimeTip.Popup("Exported dyson sphere data to clipboard!");
+                    System.Console.WriteLine("Exported dyson sphere data to clipboard!");
+                }
+                if (Input.GetKeyDown(KeyCode.P))
+                {
+                    Import(__instance.viewDysonSphere, GUIUtility.systemCopyBuffer);
+                }
                 if (cellValue != null)
                 {
-                    var dysonSphere = __instance.viewDysonSphere;
                     if (dysonSphere != null)
                     {                    
                         // Structure Progress
