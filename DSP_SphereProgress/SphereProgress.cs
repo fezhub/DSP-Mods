@@ -35,10 +35,10 @@ namespace DSP_Mods.SphereProgress
                     if (dysonSphere != null)
                     {                    
                         // Structure Progress
-                        structValue.GetComponentInChildren<Text>().text = $"{dysonSphere.totalConstructedPoint} / {dysonSphere.totalStructurePoint}";
+                        structValue.GetComponentInChildren<Text>().text = $"{dysonSphere.totalConstructedStructurePoint} / {dysonSphere.totalStructurePoint}";
 
                         // Cell Progress
-                        int totalCp = 0, cpOrdered = 0, totalCpMax = 0;
+                        int cpOrdered = 0;
                         for (int i = 1; i < dysonSphere.layersIdBased.Length; i++)
                         {
                             if (dysonSphere.layersIdBased[i] != null && dysonSphere.layersIdBased[i].id == i)
@@ -48,14 +48,12 @@ namespace DSP_Mods.SphereProgress
                                     DysonNode dysonNode = dysonSphere.layersIdBased[i].nodePool[j];
                                     if (dysonNode != null && dysonNode.id == j)
                                     {
-                                        totalCp += dysonNode.totalCp;
                                         cpOrdered += dysonNode.cpOrdered;
-                                        totalCpMax += dysonNode.totalCpMax;
                                     }
                                 }
                             }
                         }
-                        cellValue.GetComponentInChildren<Text>().text = $"{totalCp}/{cpOrdered}/{totalCpMax}";
+                        cellValue.GetComponentInChildren<Text>().text = $"{dysonSphere.totalConstructedCellPoint}/{cpOrdered}/{dysonSphere.totalCellPoint}";
                     }
                     else
                     {
