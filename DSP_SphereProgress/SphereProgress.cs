@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace DSP_Mods.SphereProgress
 {
-    [BepInPlugin("org.fezeral.plugins.sphereprogress", "Sphere Progress Plug-In", "1.0.0.0")]
+    [BepInPlugin("org.fezeral.plugins.sphereprogress", "Sphere Progress Plug-In", "1.1.0.0")]
     class SphereProgress : BaseUnityPlugin
     {
         Harmony harmony;
