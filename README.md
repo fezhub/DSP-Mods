@@ -14,6 +14,8 @@ When copying a building, the attached inserters are also copied to the new locat
 ## Sphere Progress
 Adds progress information to the Dyson Sphere UI screen
 
+Press 'S' to save the Dyson Sphere to clipboard, press 'L' to load Dyson Sphere from clipboard. Press 'P' to load Dyson Sphere with progress(If you saved a completed sphere, this will load a completed sphere).
+
 ![Sphere Progress Demo](DSP_SphereProgress/sphereprogress.png)
 
 ## Installation Instructions
