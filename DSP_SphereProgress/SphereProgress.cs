@@ -160,13 +160,8 @@ namespace DSP_Mods.SphereProgress
                 System.Console.WriteLine("JSON size: " + json.Length);
                 return json;
             }
-            public static void ImportStructure(DysonSphere dysonSphere, string dysonSphereData)
+            public static void RemoveAllLayers(DysonSphere dysonSphere)
             {
-                var deserializer = new fsSerializer();
-                fsData data = fsJsonParser.Parse(dysonSphereData);
-                var structure = new DysonSphereStructure();
-                deserializer.TryDeserialize(data, ref structure).AssertSuccessWithoutWarnings();
-                /*
                 for (int i = 0; i < dysonSphere.layersIdBased.Length; i++)
                 {
                     var layer = dysonSphere.layersIdBased[i];
@@ -174,9 +169,29 @@ namespace DSP_Mods.SphereProgress
                     {
                         continue;
                     }
-                    dysonSphere.RemoveLayer(i);
+                    for (int j = 1; j < layer.shellCursor; j ++)
+                    {
+                        layer.RemoveDysonShell(j);
+                    }
+                    for (int j = 1; j < layer.frameCursor; j ++)
+                    {
+                        layer.RemoveDysonFrame(j);
+                    }
+                    for (int j = 1; j < layer.nodeCursor; j ++)
+                    {
+                        layer.RemoveDysonNode(j);
+                    }
+                    dysonSphere.RemoveLayer(layer);
                 }
-                */
+            }
+            public static void ImportStructure(DysonSphere dysonSphere, string dysonSphereData)
+            {
+                var deserializer = new fsSerializer();
+                fsData data = fsJsonParser.Parse(dysonSphereData);
+                var structure = new DysonSphereStructure();
+                deserializer.TryDeserialize(data, ref structure).AssertSuccessWithoutWarnings();
+                RemoveAllLayers(dysonSphere);
+
                 int nodeCount = 0;
                 foreach (var layer in structure.layers)
                 {
