@@ -5,6 +5,7 @@ using UnityEngine.UI;
 using System.IO;
 using System;
 using System.Collections.Generic;
+using System.IO.Compression;
 
 namespace DSP_Mods.SphereProgress
 {
@@ -12,11 +13,18 @@ namespace DSP_Mods.SphereProgress
     {
         public static void Clear<T>(T[] arr)
         {
+            if (arr == null)
+            {
+                return;
+            }
             Array.Clear(arr, 0, arr.Length);
         }
         public static void ResetSphereProgress(this DysonSphere dysonSphere)
         {
-
+            if (dysonSphere == null)
+            {
+                return;
+            }
             // reset cell point progress
             for (int index1 = 1; index1 < dysonSphere.layersIdBased.Length; ++index1)
             {
@@ -109,7 +117,7 @@ namespace DSP_Mods.SphereProgress
             Destroy(PatchSphereProgress.structLabel);
             Destroy(PatchSphereProgress.structValue);
         }
-
+        public static readonly string DSP_SAVE_PATH = $"{Paths.GameRootPath}/dsp_save.txt";
         class PatchSphereProgress
         {
             public static string Export(DysonSphere dysonSphere)
@@ -120,14 +128,18 @@ namespace DSP_Mods.SphereProgress
                     System.Console.WriteLine(autoNode);
                 }
                 var memoryStream = new MemoryStream();
+                // var deflateStream = new GZipStream(memoryStream, CompressionMode.Compress);
                 dysonSphere.Export(new System.IO.BinaryWriter(memoryStream));
+                System.Console.WriteLine("Export: raw compressed bits length: " + memoryStream.Length);
                 return System.Convert.ToBase64String(memoryStream.ToArray());
             }
 
             public static void Import(DysonSphere dysonSphere, string dysonSphereData)
             {
                 byte[] data = System.Convert.FromBase64String(dysonSphereData);
+                System.Console.WriteLine("Import: raw compressed bits length: " + data.Length);
                 var memoryStream = new MemoryStream(data);
+                // var deflateStream = new GZipStream(memoryStream, CompressionMode.Decompress);
                 dysonSphere.Import(new BinaryReader(memoryStream));
             }
 
@@ -135,12 +147,10 @@ namespace DSP_Mods.SphereProgress
             {
                 DysonSphere loadedSphere = new DysonSphere();
                 loadedSphere.Init(dysonSphere.gameData, dysonSphere.starData);
-                byte[] data = System.Convert.FromBase64String(dysonSphereData);
-                var memoryStream = new MemoryStream(data);
-                loadedSphere.Import(new BinaryReader(memoryStream));
+                Import(loadedSphere, dysonSphereData);
                 for (int i = 1; i < dysonSphere.layerCount; i++)
                 {
-                    // dysonSphere.RemoveLayer(i);
+                    dysonSphere.RemoveLayer(i);
                 }
                 int nodeCount = 0;
                 for (int index1 = 1; index1 < loadedSphere.layersIdBased.Length; ++index1)
@@ -158,7 +168,7 @@ namespace DSP_Mods.SphereProgress
                             {
                                 continue;
                             }
-                            nodeIdMap[dysonNode.id] = newLayer.NewDysonNode(dysonNode.protoId, dysonNode.pos);
+                            nodeIdMap[dysonNode.id] = newLayer.NewDysonNode(0, dysonNode.pos);
                             GameMain.gameScenario.NotifyOnPlanDysonNode();
                             nodeCount++;
                             if (nodeIdMap[dysonNode.id] <= 0)
@@ -178,7 +188,7 @@ namespace DSP_Mods.SphereProgress
                                 {
                                     System.Console.WriteLine("Missing node for frame " + index2 + " old node: " + dysonFrame.nodeA.id + ", " + dysonFrame.nodeB.id);
                                 }
-                                if (newLayer.NewDysonFrame(dysonFrame.protoId, node1, node2, dysonFrame.euler) != dysonFrame.id)
+                                if (newLayer.NewDysonFrame(0, node1, node2, dysonFrame.euler) != dysonFrame.id)
                                 {
                                     System.Console.WriteLine("Frame id mismatch!");
                                 }
@@ -186,7 +196,7 @@ namespace DSP_Mods.SphereProgress
                             }
                         }
                         
-                        /*
+                        
                         DysonShell[] shellPool = layer.shellPool;
                         for (int index2 = 1; index2 < layer.shellCursor; ++index2)
                         {
@@ -206,36 +216,77 @@ namespace DSP_Mods.SphereProgress
                                         nodeIdList.Add(id);
                                     }
                                 });
-                                if(newLayer.NewDysonShell(shell.id, nodeIdList)!= shell.id)
+                                if(newLayer.NewDysonShell(shell.protoId, nodeIdList) != shell.id)
                                 {
                                     System.Console.WriteLine("Shell id mismatch!");
                                 }
+                                newLayer.shellPool[shell.id].GenerateGeometry();
                             }
                         }
-                        */
+                        
                         
                     }
                 }
             }
+            /*
+            [HarmonyPrefix, HarmonyPatch(typeof(DysonSphere), "UpdateStates", new Type[] { typeof(DysonFrame), typeof(System.UInt32), typeof(System.Boolean), typeof(System.Boolean) })]
+            public static bool DysonSphere_UpdateStates_Prefix(DysonSphere __instance, DysonFrame frame, System.UInt32 state, System.Boolean add, System.Boolean remove)
+            {
+                if (frame == null)
+                {
+                    System.Console.WriteLine("Something is not right, frame == null, state = " + state + " add = " + add + " remove = " + remove);
+                } else if (__instance == null)
+                {
+                    System.Console.WriteLine("__instance == null");
+                }
+                else if (__instance.modelRenderer == null)
+                {
+                    System.Console.WriteLine("modelRenderer == null");
+                } else if (__instance.modelRenderer.batches == null)
+                {
+                    System.Console.WriteLine("batches == null");
+                }
+                else if (__instance.modelRenderer.batches[frame.protoId] == null)
+                {
+                    System.Console.WriteLine("DysonSphereSegmentRenderer.protoMeshes[index] = " + DysonSphereSegmentRenderer.protoMeshes[frame.protoId]);
+                    System.Console.WriteLine("DysonSphereSegmentRenderer.protoMeshes[index] = " + DysonSphereSegmentRenderer.protoMats[frame.protoId]);
+                    System.Console.WriteLine("batches[protoId] == null " + frame.protoId);
+                }
+                else if (__instance.modelRenderer.batches[frame.protoId].segs == null)
+                {
+                    System.Console.WriteLine("segs == null");
+                }
+                return true;
+            }
+            */
             internal static GameObject cellValue, cellLabel, structValue, structLabel;
             [HarmonyPostfix, HarmonyPatch(typeof(UIDysonPanel), "_OnUpdate")]
             public static void UIDysonPanel_OnUpdate_Postfix(UIDysonPanel __instance)
             {
                 if (Input.GetKeyDown(KeyCode.L))
                 {
+                    ImportStructure(__instance.viewDysonSphere, GUIUtility.systemCopyBuffer);
+                    /*
                     Import(__instance.viewDysonSphere, GUIUtility.systemCopyBuffer);
+                    System.Console.WriteLine("Resetting sphere progress...");
                     __instance.viewDysonSphere.ResetSphereProgress();
                     string data = Export(__instance.viewDysonSphere);
                     Import(__instance.viewDysonSphere, data);
+                    */
                     UIRealtimeTip.Popup("Imported dyson sphere data from clipboard!");
                     System.Console.WriteLine("Imported dyson sphere data from clipboard!");
                 }
                 var dysonSphere = __instance.viewDysonSphere;
                 if (Input.GetKeyDown(KeyCode.S))
                 {
-                    GUIUtility.systemCopyBuffer = Export(dysonSphere);
+                    string data = Export(dysonSphere);
+                    GUIUtility.systemCopyBuffer = data;
                     UIRealtimeTip.Popup("Exported dyson sphere data to clipboard!");
                     System.Console.WriteLine("Exported dyson sphere data to clipboard!");
+                    using (StreamWriter outputFile = new StreamWriter(DSP_SAVE_PATH))
+                    {
+                        outputFile.WriteLine(data);
+                    }
                 }
                 if (Input.GetKeyDown(KeyCode.P))
                 {
