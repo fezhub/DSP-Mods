@@ -38,6 +38,7 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="CompleteSphere.cs" />
     <Compile Include="DysonSphereStructure.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SphereProgress.cs" />

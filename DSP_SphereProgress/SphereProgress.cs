@@ -5,8 +5,6 @@ using UnityEngine.UI;
 using System.IO;
 using System;
 using System.Collections.Generic;
-using System.IO.Compression;
-using Newtonsoft.Json;
 using FullSerializer;
 
 namespace DSP_Mods.SphereProgress
