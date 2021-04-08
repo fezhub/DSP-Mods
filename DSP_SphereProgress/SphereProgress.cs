@@ -21,6 +21,54 @@ namespace DSP_Mods.SphereProgress
             }
             Array.Clear(arr, 0, arr.Length);
         }
+        public static IEnumerable<DysonSphereLayer> GetLayers(DysonSphere sphere)
+        {
+            for (int i = 0; i < sphere.layersIdBased.Length; i ++)
+            {
+                var layer = sphere.layersIdBased[i];
+                if (layer == null || layer.id != i)
+                {
+                    continue;
+                }
+                yield return layer;
+            }
+        }
+        public static IEnumerable<DysonNode> GetNodes(DysonSphereLayer layer)
+        {
+            for (int i = 0; i < layer.nodeCursor; i++)
+            {
+                var node = layer.nodePool[i];
+                if (node == null || node.id != i)
+                {
+                    continue;
+                }
+                yield return node;
+            }
+        }
+        public static IEnumerable<DysonFrame> GetFrames(DysonSphereLayer layer)
+        {
+            for (int i = 0; i < layer.frameCursor; i++)
+            {
+                var frame = layer.framePool[i];
+                if (frame == null || frame.id != i)
+                {
+                    continue;
+                }
+                yield return frame;
+            }
+        }
+        public static IEnumerable<DysonShell> GetShells(DysonSphereLayer layer)
+        {
+            for (int i = 0; i < layer.shellCursor; i++)
+            {
+                var shell = layer.shellPool[i];
+                if (shell == null || shell.id != i)
+                {
+                    continue;
+                }
+                yield return shell;
+            }
+        }
         public static void ResetSphereProgress(this DysonSphere dysonSphere)
         {
             if (dysonSphere == null)
@@ -162,25 +210,37 @@ namespace DSP_Mods.SphereProgress
             }
             public static void RemoveAllLayers(DysonSphere dysonSphere)
             {
-                for (int i = 0; i < dysonSphere.layersIdBased.Length; i++)
+                foreach (var layer in DysonSphereUtils.GetLayers(dysonSphere))
                 {
-                    var layer = dysonSphere.layersIdBased[i];
-                    if (layer == null || layer.id != i)
+                    foreach(var shell in DysonSphereUtils.GetShells(layer))
                     {
-                        continue;
+                        layer.RemoveDysonShell(shell.id);
                     }
-                    for (int j = 1; j < layer.shellCursor; j ++)
+                    foreach(var frame in DysonSphereUtils.GetFrames(layer))
                     {
+                        layer.RemoveDysonFrame(frame.id);
+                    }
+                    foreach (var node in DysonSphereUtils.GetNodes(layer))
+                    {
+                        layer.RemoveDysonNode(node.id);
+                    }
+                    /*
+                    for (int j = 1; j < layer.shellCursor; j++)
+                    {
+                        if (layer.shellPool[j] == null) continue;
                         layer.RemoveDysonShell(j);
                     }
-                    for (int j = 1; j < layer.frameCursor; j ++)
+                    for (int j = 1; j < layer.frameCursor; j++)
                     {
+                        if (layer.framePool[j] == null) continue;
                         layer.RemoveDysonFrame(j);
                     }
-                    for (int j = 1; j < layer.nodeCursor; j ++)
+                    for (int j = 1; j < layer.nodeCursor; j++)
                     {
+                        if (layer.nodePool[j] == null) continue;
                         layer.RemoveDysonNode(j);
                     }
+                    */
                     dysonSphere.RemoveLayer(layer);
                 }
             }
@@ -195,6 +255,7 @@ namespace DSP_Mods.SphereProgress
                 int nodeCount = 0;
                 foreach (var layer in structure.layers)
                 {
+                    System.Console.Write("Importing layer " + layer.id);
                     int maxId = 0;
                     foreach (var node in layer.nodes)
                     {
@@ -221,12 +282,13 @@ namespace DSP_Mods.SphereProgress
                         {
                             System.Console.WriteLine("Missing node for frame " + dysonFrame.id + " old node: " + dysonFrame.nodeAId + ", " + dysonFrame.nodeBId);
                         }
-                        if (newLayer.NewDysonFrame(0, node1, node2, dysonFrame.euler) != dysonFrame.id)
+                        int frameId = newLayer.NewDysonFrame(0, node1, node2, dysonFrame.euler);
+                        if (frameId != dysonFrame.id)
                         {
-                            System.Console.WriteLine("Frame id mismatch!");
+                            System.Console.WriteLine($"Frame id mismatch! Expected {frameId} actual {dysonFrame.id}");
                         }
-                        GameMain.gameScenario.NotifyOnPlanDysonFrame();
                     }
+                    System.Console.WriteLine("Created " + layer.frames.Count + " frames");
 
 
                     foreach (var shell in layer.shells)
@@ -241,12 +303,13 @@ namespace DSP_Mods.SphereProgress
                             }
                             nodeIdList.Add(id);
                         }
-                        if (newLayer.NewDysonShell(shell.protoId, nodeIdList) != shell.id)
+                        int shellId = newLayer.NewDysonShell(shell.protoId, nodeIdList);
+                        if (shellId != shell.id)
                         {
-                            System.Console.WriteLine("Shell id mismatch!");
+                            System.Console.WriteLine($"Shell id mismatch! expected {shell.id} actual: {shellId}");
                         }
-                        newLayer.shellPool[shell.id].GenerateGeometry();
                     }
+                    System.Console.WriteLine("Created " + layer.shells.Count + " shells");
                 }
             }
             /*
@@ -311,7 +374,19 @@ namespace DSP_Mods.SphereProgress
                 }
                 if (Input.GetKeyDown(KeyCode.P))
                 {
-                    
+                    if (dysonSphere != null)
+                    {
+                        for (int i = 0; i < dysonSphere.layersIdBased.Length; i ++)
+                        {
+                            var layer = dysonSphere.layersIdBased[i];
+                            if (layer == null || layer.id != i)
+                            {
+                                continue;
+                            }
+                            System.Console.WriteLine($"Completing layer {i}");
+                            CompleteSphere.CompleteLayer(layer);
+                        }
+                    }
                 }
                 if (cellValue != null)
                 {
