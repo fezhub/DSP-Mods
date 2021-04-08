@@ -38,6 +38,7 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="DysonSphereStructure.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SphereProgress.cs" />
   </ItemGroup>
@@ -53,6 +54,9 @@
     </Reference>
     <Reference Include="BepInEx.Harmony">
       <HintPath>..\..\BepInEx_x64_5.4.5.0\BepInEx\core\BepInEx.Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="FullSerializer">
+      <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Dyson Sphere Program\BepInEx\plugins\brokenmass-MultiBuildBeta\FullSerializer.dll</HintPath>
     </Reference>
     <Reference Include="Mono.Cecil">
       <HintPath>..\..\BepInEx_x64_5.4.5.0\BepInEx\core\Mono.Cecil.dll</HintPath>
