@@ -9,6 +9,10 @@ namespace DSP_Mods.SphereProgress
     class DysonSphereStructure
     {
         public IList<DysonLayerStructure> layers { get; set; }
+        public float minOrbitRadius { get; set; }
+        public float maxOrbitRadius { get; set; }
+        public float dysonLumino { get; set; }
+
         public static DysonSphereStructure Create(DysonSphere obj)
         {
             var structure = new DysonSphereStructure();
@@ -27,6 +31,9 @@ namespace DSP_Mods.SphereProgress
                 }
                 structure.layers.Add(DysonLayerStructure.Create(layer));
             }
+            structure.maxOrbitRadius = obj.maxOrbitRadius;
+            structure.minOrbitRadius = obj.minOrbitRadius;
+            structure.dysonLumino = obj.starData.dysonLumino;
             return structure;
         }
 

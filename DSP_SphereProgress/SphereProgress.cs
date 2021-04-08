@@ -224,23 +224,6 @@ namespace DSP_Mods.SphereProgress
                     {
                         layer.RemoveDysonNode(node.id);
                     }
-                    /*
-                    for (int j = 1; j < layer.shellCursor; j++)
-                    {
-                        if (layer.shellPool[j] == null) continue;
-                        layer.RemoveDysonShell(j);
-                    }
-                    for (int j = 1; j < layer.frameCursor; j++)
-                    {
-                        if (layer.framePool[j] == null) continue;
-                        layer.RemoveDysonFrame(j);
-                    }
-                    for (int j = 1; j < layer.nodeCursor; j++)
-                    {
-                        if (layer.nodePool[j] == null) continue;
-                        layer.RemoveDysonNode(j);
-                    }
-                    */
                     dysonSphere.RemoveLayer(layer);
                 }
             }
@@ -312,37 +295,6 @@ namespace DSP_Mods.SphereProgress
                     System.Console.WriteLine("Created " + layer.shells.Count + " shells");
                 }
             }
-            /*
-            [HarmonyPrefix, HarmonyPatch(typeof(DysonSphere), "UpdateStates", new Type[] { typeof(DysonFrame), typeof(System.UInt32), typeof(System.Boolean), typeof(System.Boolean) })]
-            public static bool DysonSphere_UpdateStates_Prefix(DysonSphere __instance, DysonFrame frame, System.UInt32 state, System.Boolean add, System.Boolean remove)
-            {
-                if (frame == null)
-                {
-                    System.Console.WriteLine("Something is not right, frame == null, state = " + state + " add = " + add + " remove = " + remove);
-                } else if (__instance == null)
-                {
-                    System.Console.WriteLine("__instance == null");
-                }
-                else if (__instance.modelRenderer == null)
-                {
-                    System.Console.WriteLine("modelRenderer == null");
-                } else if (__instance.modelRenderer.batches == null)
-                {
-                    System.Console.WriteLine("batches == null");
-                }
-                else if (__instance.modelRenderer.batches[frame.protoId] == null)
-                {
-                    System.Console.WriteLine("DysonSphereSegmentRenderer.protoMeshes[index] = " + DysonSphereSegmentRenderer.protoMeshes[frame.protoId]);
-                    System.Console.WriteLine("DysonSphereSegmentRenderer.protoMeshes[index] = " + DysonSphereSegmentRenderer.protoMats[frame.protoId]);
-                    System.Console.WriteLine("batches[protoId] == null " + frame.protoId);
-                }
-                else if (__instance.modelRenderer.batches[frame.protoId].segs == null)
-                {
-                    System.Console.WriteLine("segs == null");
-                }
-                return true;
-            }
-            */
             internal static GameObject cellValue, cellLabel, structValue, structLabel;
             [HarmonyPostfix, HarmonyPatch(typeof(UIDysonPanel), "_OnUpdate")]
             public static void UIDysonPanel_OnUpdate_Postfix(UIDysonPanel __instance)
@@ -350,13 +302,6 @@ namespace DSP_Mods.SphereProgress
                 if (Input.GetKeyDown(KeyCode.L))
                 {
                     ImportStructure(__instance.viewDysonSphere, GUIUtility.systemCopyBuffer);
-                    /*
-                    Import(__instance.viewDysonSphere, GUIUtility.systemCopyBuffer);
-                    System.Console.WriteLine("Resetting sphere progress...");
-                    __instance.viewDysonSphere.ResetSphereProgress();
-                    string data = Export(__instance.viewDysonSphere);
-                    Import(__instance.viewDysonSphere, data);
-                    */
                     UIRealtimeTip.Popup("Imported dyson sphere data from clipboard!");
                     System.Console.WriteLine("Imported dyson sphere data from clipboard!");
                 }
